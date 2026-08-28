@@ -1,0 +1,864 @@
+diff --git a/README.md b/README.md
+index afe2464..f9516fe 100644
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,20 @@ A practice tool for SSC CGL Tier 1 Quantitative Aptitude previous-year
+ questions. No login, no backend. TypeScript + Vite for the build; the
+ output is still a static site you can host anywhere.
+ 
++## Structure of the app
++
++A persistent sidebar (like a real app shell, not a single scrolling
++page) with two routes, switched by a minimal hash router in `app.ts`
++— no router library, just `location.hash`:
++
++- **`#/practice`** (default) — the question feed: live progress stat,
++  topic filter chips, question cards.
++- **`#/progress`** — a mastery breakdown: overall stat plus one row
++  per topic with its own mini progress bar.
++
++Both routes render into the single `#view-root` element; the sidebar
++itself never re-renders.
++
+ ## File structure
+ 
+ ```
+@@ -14,7 +28,7 @@ examforge/
+ ├── vite.config.ts
+ ├── src/
+ │   ├── main.ts              # Boots the app
+-│   ├── app.ts                # Rendering, MCQ logic, confetti, localStorage progress
++│   ├── app.ts                # Router, rendering, MCQ logic, confetti, localStorage progress
+ │   ├── types.ts               # Question / progress types — the schema source of truth
+ │   ├── global.d.ts            # Ambient type for the KaTeX CDN global
+ │   ├── styles.css              # All visual design
+diff --git a/index.html b/index.html
+index dffbd4e..a41bb6e 100644
+--- a/index.html
++++ b/index.html
+@@ -11,7 +11,7 @@
+   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+ 
+-  <!-- Fonts: Space Grotesk (display — bold, geometric, has presence), Inter (body) -->
++  <!-- Fonts: Space Grotesk (display), Inter (body) -->
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+@@ -20,37 +20,32 @@
+ </head>
+ <body>
+ 
+-  <!-- Dark hero band: brand + live progress stat, one confident color block -->
+-  <header class="hero-band">
+-    <div class="hero-inner">
+-      <div class="hero-brand">
++  <div class="app-shell">
++    <aside class="sidebar">
++      <div class="sidebar__brand">
+         <span class="hero-accent-bar" aria-hidden="true"></span>
+-        <span class="eyebrow">SSC CGL · Tier 1 · Quantitative Aptitude</span>
++        <span class="sidebar__brand-text">ExamForge</span>
+       </div>
+-      <h1 class="hero-title">ExamForge</h1>
+-      <p class="hero-subtitle">Previous-year quant questions, worked two ways.</p>
+-
+-      <div class="hero-stat">
+-        <span class="hero-stat__label">Your progress</span>
+-        <span id="progress-value" class="hero-stat__value font-tabular">0 / 0</span>
+-        <span id="progress-delta" class="hero-stat__delta">0% mastered</span>
+-        <div class="hero-stat__track">
+-          <div id="progress-fill" class="hero-stat__fill" style="width: 0%"></div>
+-        </div>
+-      </div>
+-    </div>
+-  </header>
+-
+-  <main class="main-inner">
+-    <div id="filter-row" class="filter-row"></div>
+-    <div id="cards-container" class="cards-container"></div>
+-  </main>
+-
+-  <footer class="site-footer">
+-    <div class="footer-inner">
+-      Progress is stored locally in this browser only. No account, no server.
++      <p class="sidebar__eyebrow">SSC CGL · Tier 1 · Quant</p>
++
++      <nav class="sidebar__nav" id="sidebar-nav" aria-label="Main">
++        <button type="button" class="nav-link" data-route="practice">
++          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h5A1.5 1.5 0 0 1 10 3.5v9A1.5 1.5 0 0 1 8.5 14h-5A1.5 1.5 0 0 1 2 12.5v-9Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 5.5 14 6.7v5.6L12 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
++          Practice
++        </button>
++        <button type="button" class="nav-link" data-route="progress">
++          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 14V2M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11V8M8.5 11V5.5M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
++          Progress
++        </button>
++      </nav>
++
++      <p class="sidebar__footnote">Progress is stored locally in this browser only. No account, no server.</p>
++    </aside>
++
++    <div class="app-content">
++      <main id="view-root" class="view-root"></main>
+     </div>
+-  </footer>
++  </div>
+ 
+   <script type="module" src="/src/main.ts"></script>
+ </body>
+diff --git a/src/app.ts b/src/app.ts
+index db5c805..7f3cf4a 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -2,7 +2,9 @@
+  * ExamForge — app logic (TypeScript).
+  *
+  * Bundled by Vite. All progress lives in localStorage. No framework —
+- * this is plain DOM manipulation, just type-checked.
++ * plain DOM manipulation with a minimal hash router for two views
++ * (Practice / Progress), rendered into the persistent sidebar shell
++ * defined in index.html.
+  */
+ 
+ import { QUESTIONS } from "./data/questions";
+@@ -11,11 +13,8 @@ import type { ConfidenceLevel, ProgressMap, Question } from "./types";
+ const STORAGE_KEY = "examforge:progress:v1";
+ const OPTION_LETTERS = ["A", "B", "C", "D"] as const;
+ 
+-// One confident accent color per topic, echoing how each brand in a good
+-// landing-page set owns its own single color rather than reusing one hue
+-// everywhere. Assigned round-robin over the actual topic list (sorted, so
+-// it's stable across reloads) for even spread — six colors won't cover
+-// every topic uniquely, but this keeps repeats as far apart as possible.
++// One confident accent color per topic. Assigned round-robin over the
++// sorted topic list for even spread across the fixed six-color palette.
+ const TOPIC_PALETTE = ["#FF6B4A", "#2F5EFF", "#2FAE66", "#F2A93B", "#E4568C", "#1FA6A0"] as const;
+ 
+ function buildTopicColorMap(questions: Question[]): Map<string, string> {
+@@ -30,7 +29,6 @@ const topicColorMap = buildTopicColorMap(QUESTIONS);
+ function colorForTopic(topic: string): string {
+   const known = topicColorMap.get(topic);
+   if (known) return known;
+-  // Defensive fallback for a topic not present at map-build time.
+   let hash = 0;
+   for (let i = 0; i < topic.length; i++) {
+     hash = (hash * 31 + topic.charCodeAt(i)) >>> 0;
+@@ -53,6 +51,9 @@ const STAR_ICON =
+ let progress: ProgressMap = loadProgress();
+ let activeTopic = "all";
+ 
++type Route = "practice" | "progress";
++const DEFAULT_ROUTE: Route = "practice";
++
+ function requireEl<T extends HTMLElement>(id: string): T {
+   const el = document.getElementById(id);
+   if (!el) {
+@@ -61,11 +62,8 @@ function requireEl<T extends HTMLElement>(id: string): T {
+   return el as T;
+ }
+ 
+-const cardsContainer = requireEl<HTMLDivElement>("cards-container");
+-const progressValueEl = requireEl<HTMLSpanElement>("progress-value");
+-const progressDeltaEl = requireEl<HTMLSpanElement>("progress-delta");
+-const progressFillEl = requireEl<HTMLDivElement>("progress-fill");
+-const filterRowEl = requireEl<HTMLDivElement>("filter-row");
++const viewRoot = requireEl<HTMLElement>("view-root");
++const sidebarNav = requireEl<HTMLElement>("sidebar-nav");
+ 
+ // ---------------------------------------------------------------
+ // localStorage helpers
+@@ -91,7 +89,6 @@ function saveProgress(): void {
+ 
+ function setConfidence(id: string, confidence: ConfidenceLevel): void {
+   const current = progress[id];
+-  // Clicking the already-active chip clears it back to "unrated".
+   if (current?.confidence === confidence) {
+     delete progress[id];
+   } else {
+@@ -101,8 +98,7 @@ function setConfidence(id: string, confidence: ConfidenceLevel): void {
+ }
+ 
+ // ---------------------------------------------------------------
+-// Confetti + bounce feedback — the "addictive" positive-reinforcement
+-// moment on a correct answer. Pure DOM/CSS, no dependency.
++// Confetti + bounce feedback
+ // ---------------------------------------------------------------
+ 
+ function spawnConfetti(originEl: HTMLElement): void {
+@@ -117,7 +113,7 @@ function spawnConfetti(originEl: HTMLElement): void {
+     const angle = (Math.PI * 2 * i) / pieceCount + Math.random() * 0.6;
+     const distance = 60 + Math.random() * 50;
+     const dx = Math.cos(angle) * distance;
+-    const dy = Math.sin(angle) * distance - 20; // slight upward bias
++    const dy = Math.sin(angle) * distance - 20;
+     const rotation = Math.random() * 360;
+     const color = TOPIC_PALETTE[i % TOPIC_PALETTE.length];
+ 
+@@ -130,63 +126,71 @@ function spawnConfetti(originEl: HTMLElement): void {
+ 
+     document.body.appendChild(piece);
+     piece.addEventListener("animationend", () => piece.remove());
+-    // Safety net in case animationend doesn't fire (e.g. reduced-motion).
+     setTimeout(() => piece.remove(), 900);
+   }
+ }
+ 
+ // ---------------------------------------------------------------
+-// Rendering
++// Router
+ // ---------------------------------------------------------------
+ 
+-function buildTopicList(questions: Question[]): string[] {
+-  const topics = Array.from(new Set(questions.map((q) => q.topic)));
+-  topics.sort();
+-  return topics;
++function getRoute(): Route {
++  const hash = location.hash.replace(/^#\/?/, "");
++  return hash === "progress" ? "progress" : DEFAULT_ROUTE;
+ }
+ 
+-function renderFilterChips(questions: Question[]): void {
+-  const topics = buildTopicList(questions);
+-  const frag = document.createDocumentFragment();
+-
+-  frag.appendChild(makeChip("All topics", "all"));
+-  topics.forEach((topic) => frag.appendChild(makeChip(topic, topic)));
+-
+-  filterRowEl.innerHTML = "";
+-  filterRowEl.appendChild(frag);
++function setActiveNav(route: Route): void {
++  sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
++    link.classList.toggle("is-active", link.dataset.route === route);
++  });
+ }
+ 
+-function makeChip(label: string, value: string): HTMLButtonElement {
+-  const btn = document.createElement("button");
+-  btn.type = "button";
+-  btn.className = "filter-chip" + (value === activeTopic ? " is-active" : "");
+-  btn.textContent = label;
+-  btn.dataset.topic = value;
+-  if (value !== "all") {
+-    btn.style.setProperty("--topic-color", colorForTopic(value));
++function renderRoute(): void {
++  const route = getRoute();
++  setActiveNav(route);
++  if (route === "progress") {
++    renderProgressView(viewRoot);
++  } else {
++    renderPracticeView(viewRoot);
+   }
+-  btn.addEventListener("click", () => {
+-    activeTopic = value;
+-    renderAll();
+-  });
+-  return btn;
+ }
+ 
+-function renderScorecard(questions: Question[]): void {
+-  const total = questions.length;
+-  const mastered = questions.filter((q) => progress[q.id]?.confidence === "mastered").length;
+-  const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
++// ---------------------------------------------------------------
++// Practice view
++// ---------------------------------------------------------------
+ 
+-  progressValueEl.textContent = `${mastered} / ${total}`;
+-  progressDeltaEl.innerHTML = `${TREND_ICON} ${pct}% mastered`;
+-  progressFillEl.style.width = pct + "%";
+-}
++function renderPracticeView(root: HTMLElement): void {
++  const total = QUESTIONS.length;
++  const mastered = QUESTIONS.filter((q) => progress[q.id]?.confidence === "mastered").length;
++  const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
++  const topics = Array.from(new Set(QUESTIONS.map((q) => q.topic))).sort();
++  const visible = activeTopic === "all" ? QUESTIONS : QUESTIONS.filter((q) => q.topic === activeTopic);
++
++  root.innerHTML = `
++    <div class="view-inner">
++      <div class="stat-card">
++        <span class="stat-card__eyebrow">Practice</span>
++        <h1 class="stat-card__title">Quant PYQs</h1>
++        <p class="stat-card__subtitle">Previous-year quant questions, worked two ways.</p>
++        <div class="stat-card__stat">
++          <span class="stat-card__label">Your progress</span>
++          <span class="stat-card__value font-tabular">${mastered} / ${total}</span>
++          <span class="stat-card__delta">${TREND_ICON} ${pct}% mastered</span>
++          <div class="stat-card__track"><div class="stat-card__fill" style="width:${pct}%"></div></div>
++        </div>
++      </div>
++      <div class="filter-row" id="filter-row"></div>
++      <div class="cards-container" id="cards-container"></div>
++    </div>
++  `;
+ 
+-function renderCards(questions: Question[]): void {
+-  cardsContainer.innerHTML = "";
++  const filterRowEl = root.querySelector<HTMLDivElement>("#filter-row")!;
++  const cardsContainer = root.querySelector<HTMLDivElement>("#cards-container")!;
+ 
+-  const visible =
+-    activeTopic === "all" ? questions : questions.filter((q) => q.topic === activeTopic);
++  const chipFrag = document.createDocumentFragment();
++  chipFrag.appendChild(makeChip("All topics", "all", root));
++  topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root)));
++  filterRowEl.appendChild(chipFrag);
+ 
+   if (visible.length === 0) {
+     const empty = document.createElement("div");
+@@ -196,11 +200,10 @@ function renderCards(questions: Question[]): void {
+     return;
+   }
+ 
+-  const frag = document.createDocumentFragment();
+-  visible.forEach((q) => frag.appendChild(renderCard(q)));
+-  cardsContainer.appendChild(frag);
++  const cardsFrag = document.createDocumentFragment();
++  visible.forEach((q) => cardsFrag.appendChild(renderCard(q, root)));
++  cardsContainer.appendChild(cardsFrag);
+ 
+-  // Render all LaTeX in one pass after the DOM is attached.
+   window.renderMathInElement?.(cardsContainer, {
+     delimiters: [
+       { left: "$$", right: "$$", display: true },
+@@ -210,7 +213,23 @@ function renderCards(questions: Question[]): void {
+   });
+ }
+ 
+-function renderCard(q: Question): HTMLElement {
++function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonElement {
++  const btn = document.createElement("button");
++  btn.type = "button";
++  btn.className = "filter-chip" + (value === activeTopic ? " is-active" : "");
++  btn.textContent = label;
++  btn.dataset.topic = value;
++  if (value !== "all") {
++    btn.style.setProperty("--topic-color", colorForTopic(value));
++  }
++  btn.addEventListener("click", () => {
++    activeTopic = value;
++    renderPracticeView(root);
++  });
++  return btn;
++}
++
++function renderCard(q: Question, root: HTMLElement): HTMLElement {
+   const state = progress[q.id];
+   const isMastered = state?.confidence === "mastered";
+ 
+@@ -271,7 +290,6 @@ function renderCard(q: Question): HTMLElement {
+     </div>
+   `;
+ 
+-  // Options
+   const optionsEl = card.querySelector<HTMLDivElement>(".q-card__options")!;
+   q.options.forEach((optText, idx) => {
+     const btn = document.createElement("button");
+@@ -283,7 +301,6 @@ function renderCard(q: Question): HTMLElement {
+     optionsEl.appendChild(btn);
+   });
+ 
+-  // Reveal toggle
+   const revealBtn = card.querySelector<HTMLButtonElement>(".btn-reveal")!;
+   const revealLabel = card.querySelector<HTMLSpanElement>(".btn-reveal__label")!;
+   revealBtn.addEventListener("click", () => {
+@@ -291,16 +308,15 @@ function renderCard(q: Question): HTMLElement {
+     revealLabel.textContent = isOpen ? "Hide solution" : "Show solution";
+   });
+ 
+-  // Confidence chips
+   card.querySelectorAll<HTMLButtonElement>(".confidence-chip").forEach((chip) => {
+     chip.addEventListener("click", () => {
+       const conf = chip.dataset.conf as ConfidenceLevel;
+       const wasMastered = progress[q.id]?.confidence === "mastered";
+       setConfidence(q.id, conf);
+-      renderAll(); // re-render to update stamp + scorecard + chip state
++      renderPracticeView(root);
+       if (conf === "mastered" && !wasMastered) {
+-        const refreshedCard = cardsContainer.querySelector<HTMLElement>(`[data-id="${q.id}"] .q-card__stamp`);
+-        if (refreshedCard) spawnConfetti(refreshedCard);
++        const refreshed = root.querySelector<HTMLElement>(`[data-id="${q.id}"] .q-card__stamp`);
++        if (refreshed) spawnConfetti(refreshed);
+       }
+     });
+   });
+@@ -310,8 +326,6 @@ function renderCard(q: Question): HTMLElement {
+ 
+ function handleOptionClick(card: HTMLElement, q: Question, chosenIdx: number, chosenBtn: HTMLButtonElement): void {
+   const optionButtons = card.querySelectorAll<HTMLButtonElement>(".option");
+-  // Lock the options once an answer is chosen for this render pass.
+-  // Correctness is always shown as color + icon together, never color alone.
+   optionButtons.forEach((btn, idx) => {
+     btn.disabled = true;
+     if (idx === q.correctIndex) {
+@@ -327,12 +341,62 @@ function handleOptionClick(card: HTMLElement, q: Question, chosenIdx: number, ch
+     spawnConfetti(chosenBtn);
+   }
+ 
+-  // Answering also opens the solution — natural next step.
+   if (!card.classList.contains("is-open")) {
+     card.querySelector<HTMLButtonElement>(".btn-reveal")!.click();
+   }
+ }
+ 
++// ---------------------------------------------------------------
++// Progress view — mastery breakdown per topic
++// ---------------------------------------------------------------
++
++function renderProgressView(root: HTMLElement): void {
++  const total = QUESTIONS.length;
++  const masteredCount = QUESTIONS.filter((q) => progress[q.id]?.confidence === "mastered").length;
++  const pct = total === 0 ? 0 : Math.round((masteredCount / total) * 100);
++
++  const topics = Array.from(new Set(QUESTIONS.map((q) => q.topic))).sort();
++  const topicRows = topics.map((topic) => {
++    const topicQuestions = QUESTIONS.filter((q) => q.topic === topic);
++    const topicMastered = topicQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
++    const topicPct = topicQuestions.length === 0 ? 0 : Math.round((topicMastered / topicQuestions.length) * 100);
++    return { topic, mastered: topicMastered, total: topicQuestions.length, pct: topicPct };
++  });
++
++  root.innerHTML = `
++    <div class="view-inner">
++      <div class="stat-card">
++        <span class="stat-card__eyebrow">Progress</span>
++        <h1 class="stat-card__title">How you're doing</h1>
++        <p class="stat-card__subtitle">Mastery across every topic you've practiced.</p>
++        <div class="stat-card__stat">
++          <span class="stat-card__label">Overall mastered</span>
++          <span class="stat-card__value font-tabular">${masteredCount} / ${total}</span>
++          <span class="stat-card__delta">${TREND_ICON} ${pct}% mastered</span>
++          <div class="stat-card__track"><div class="stat-card__fill" style="width:${pct}%"></div></div>
++        </div>
++      </div>
++
++      <div class="topic-list">
++        ${topicRows
++          .map(
++            (r) => `
++          <div class="topic-row" style="--topic-color:${colorForTopic(r.topic)}">
++            <div class="topic-row__top">
++              <span class="topic-row__dot" aria-hidden="true"></span>
++              <span class="topic-row__name">${escapeHtml(r.topic)}</span>
++              <span class="topic-row__stat font-tabular">${r.mastered} / ${r.total} mastered</span>
++            </div>
++            <div class="topic-row__track"><div class="topic-row__fill" style="width:${r.pct}%"></div></div>
++          </div>
++        `
++          )
++          .join("")}
++      </div>
++    </div>
++  `;
++}
++
+ // ---------------------------------------------------------------
+ // Small utilities
+ // ---------------------------------------------------------------
+@@ -343,8 +407,6 @@ function escapeHtml(str: string): string {
+   return div.innerHTML;
+ }
+ 
+-// Solution strings use \n\n between steps; render each as its own <p>.
+-// KaTeX auto-render runs after insertion, so LaTeX inside survives untouched.
+ function paragraphize(text: string): string {
+   return text
+     .split("\n\n")
+@@ -352,21 +414,24 @@ function paragraphize(text: string): string {
+     .join("");
+ }
+ 
+-function renderAll(): void {
+-  renderFilterChips(QUESTIONS);
+-  renderScorecard(QUESTIONS);
+-  renderCards(QUESTIONS);
+-}
+-
+ // ---------------------------------------------------------------
+ // Boot
+ // ---------------------------------------------------------------
+ 
+ export function initApp(): void {
+   if (!Array.isArray(QUESTIONS)) {
+-    cardsContainer.innerHTML =
++    viewRoot.innerHTML =
+       '<div class="empty-state">Question data failed to load — check src/data/questions.ts.</div>';
+     return;
+   }
+-  renderAll();
++
++  sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
++    link.addEventListener("click", () => {
++      const route = link.dataset.route as Route;
++      location.hash = "/" + route;
++    });
++  });
++
++  window.addEventListener("hashchange", renderRoute);
++  renderRoute();
+ }
+diff --git a/src/styles.css b/src/styles.css
+index 0729464..156284c 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -80,52 +80,163 @@ body {
+ }
+ 
+ /* ==========================================================================
+-   Layout shells
++   App shell — persistent sidebar (light, matches the reference's nav
++   style: pill-highlighted active link) + a content column whose only
++   child is the router-driven #view-root.
+    ========================================================================== */
+ 
+-.hero-inner,
+-.main-inner,
+-.footer-inner {
+-  max-width: 56rem;
+-  margin: 0 auto;
+-  padding-left: 1.5rem;
+-  padding-right: 1.5rem;
++:root {
++  --brand-accent: #ff6b4a;
++  --brand-accent-soft: #ffe7de;
+ }
+ 
+-.main-inner {
+-  padding-top: 2rem;
+-  padding-bottom: 3rem;
++.app-shell {
++  display: flex;
++  min-height: 100vh;
+ }
+ 
+-/* ==========================================================================
+-   Hero band — full-bleed dark block holding brand + live progress stat.
+-   The one deliberately loud section of the page, echoing a DTC landing
+-   page's colored hero, with lighter content below it.
+-   ========================================================================== */
+-
+-.hero-band {
+-  background: var(--ink-dark);
+-  color: var(--ink-dark-text);
+-  padding-top: 3rem;
+-  padding-bottom: 2.5rem;
++.sidebar {
++  width: 15rem;
++  flex-shrink: 0;
++  display: flex;
++  flex-direction: column;
++  background: var(--surface-raised);
++  border-right: 1px solid var(--border-subtle);
++  padding: 1.75rem 1.25rem;
++  position: sticky;
++  top: 0;
++  height: 100vh;
++  overflow-y: auto;
+ }
+ 
+-.hero-brand {
++.sidebar__brand {
+   display: flex;
+   align-items: center;
+-  gap: 0.6rem;
+-  margin-bottom: 1rem;
++  gap: 0.5rem;
++  margin-bottom: 0.2rem;
+ }
+ 
+ .hero-accent-bar {
+   display: inline-block;
+   width: 3px;
+   height: 1rem;
+-  background: #ff6b4a;
++  background: var(--brand-accent);
+   border-radius: 2px;
+ }
+ 
+-.eyebrow {
++.sidebar__brand-text {
++  font-family: var(--font-display);
++  font-weight: 700;
++  font-size: 1.1rem;
++  color: var(--ink);
++}
++
++.sidebar__eyebrow {
++  font-size: 0.7rem;
++  font-weight: 600;
++  letter-spacing: 0.03em;
++  text-transform: uppercase;
++  color: var(--ink-muted);
++  margin-bottom: 1.75rem;
++}
++
++.sidebar__nav {
++  display: flex;
++  flex-direction: column;
++  gap: 0.25rem;
++  flex: 1;
++}
++
++.nav-link {
++  display: flex;
++  align-items: center;
++  gap: 0.65rem;
++  padding: 0.6rem 0.75rem;
++  border-radius: 0.65rem;
++  border: none;
++  background: transparent;
++  color: var(--ink-muted);
++  font-family: var(--font-body);
++  font-weight: 600;
++  font-size: 0.88rem;
++  cursor: pointer;
++  text-align: left;
++  transition: background-color 140ms ease, color 140ms ease;
++}
++
++.nav-link:hover {
++  background: var(--surface-sunken);
++  color: var(--ink);
++}
++
++.nav-link.is-active {
++  background: var(--brand-accent-soft);
++  color: #c8451f;
++}
++
++.sidebar__footnote {
++  margin-top: 1rem;
++  padding-top: 1rem;
++  border-top: 1px solid var(--border-subtle);
++  font-size: 0.72rem;
++  line-height: 1.5;
++  color: var(--ink-muted);
++}
++
++.app-content {
++  flex: 1;
++  min-width: 0;
++}
++
++.view-inner {
++  max-width: 44rem;
++  margin: 0 auto;
++  padding: 2.5rem 2rem 3rem;
++}
++
++@media (max-width: 768px) {
++  .app-shell {
++    flex-direction: column;
++  }
++  .sidebar {
++    width: 100%;
++    height: auto;
++    position: static;
++    flex-direction: row;
++    align-items: center;
++    border-right: none;
++    border-bottom: 1px solid var(--border-subtle);
++    padding: 1rem 1.25rem;
++  }
++  .sidebar__eyebrow,
++  .sidebar__footnote {
++    display: none;
++  }
++  .sidebar__brand {
++    margin-right: 1.5rem;
++    margin-bottom: 0;
++  }
++  .sidebar__nav {
++    flex-direction: row;
++    flex: 0;
++  }
++}
++
++/* ==========================================================================
++   Stat card — reusable dark component (Practice's live progress stat,
++   Progress's overall total). Contained/rounded rather than full-bleed,
++   since it now lives in the content column beside the sidebar.
++   ========================================================================== */
++
++.stat-card {
++  background: var(--ink-dark);
++  color: var(--ink-dark-text);
++  border-radius: 1.25rem;
++  padding: 1.75rem 2rem 2rem;
++  margin-bottom: 1.75rem;
++}
++
++.stat-card__eyebrow {
+   font-size: 0.78rem;
+   font-weight: 600;
+   letter-spacing: 0.03em;
+@@ -133,45 +244,45 @@ body {
+   color: var(--ink-dark-text-muted);
+ }
+ 
+-.hero-title {
++.stat-card__title {
+   font-family: var(--font-display);
+   font-weight: 700;
+-  font-size: 2.6rem;
+-  letter-spacing: -0.02em;
++  font-size: 1.9rem;
++  letter-spacing: -0.01em;
+   color: var(--ink-dark-text);
+-  line-height: 1.05;
++  line-height: 1.1;
++  margin-top: 0.3rem;
+ }
+ 
+-.hero-subtitle {
+-  font-size: 1rem;
++.stat-card__subtitle {
++  font-size: 0.92rem;
+   color: var(--ink-dark-text-muted);
+-  margin-top: 0.5rem;
+-  margin-bottom: 2.25rem;
++  margin-top: 0.4rem;
++  margin-bottom: 1.75rem;
+ }
+ 
+-.hero-stat {
++.stat-card__stat {
+   display: flex;
+   flex-direction: column;
+   gap: 0.55rem;
+-  max-width: 22rem;
+ }
+ 
+-.hero-stat__label {
++.stat-card__label {
+   font-size: 0.85rem;
+   font-weight: 600;
+   color: var(--ink-dark-text-muted);
+ }
+ 
+-.hero-stat__value {
++.stat-card__value {
+   font-family: var(--font-display);
+   font-weight: 700;
+-  font-size: 3rem;
++  font-size: 2.6rem;
+   line-height: 1;
+-  color: #ff6b4a;
++  color: var(--brand-accent);
+   letter-spacing: -0.01em;
+ }
+ 
+-.hero-stat__delta {
++.stat-card__delta {
+   display: inline-flex;
+   align-items: center;
+   gap: 0.35rem;
+@@ -184,7 +295,7 @@ body {
+   font-weight: 600;
+ }
+ 
+-.hero-stat__track {
++.stat-card__track {
+   margin-top: 0.4rem;
+   width: 100%;
+   height: 6px;
+@@ -193,9 +304,70 @@ body {
+   overflow: hidden;
+ }
+ 
+-.hero-stat__fill {
++.stat-card__fill {
++  height: 100%;
++  background: var(--brand-accent);
++  border-radius: 999px;
++  transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1);
++}
++
++/* ==========================================================================
++   Topic breakdown list — Progress view. Row pattern: colored dot + name
++   + "x / y mastered" on top, a mini mastery bar underneath.
++   ========================================================================== */
++
++.topic-list {
++  display: flex;
++  flex-direction: column;
++  gap: 0.75rem;
++}
++
++.topic-row {
++  background: var(--surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-radius: 1rem;
++  padding: 1rem 1.1rem;
++}
++
++.topic-row__top {
++  display: flex;
++  align-items: center;
++  gap: 0.7rem;
++  margin-bottom: 0.6rem;
++}
++
++.topic-row__dot {
++  width: 0.6rem;
++  height: 0.6rem;
++  border-radius: 999px;
++  background: var(--topic-color);
++  flex-shrink: 0;
++}
++
++.topic-row__name {
++  font-weight: 700;
++  font-size: 0.9rem;
++  color: var(--ink);
++  flex: 1;
++  min-width: 0;
++}
++
++.topic-row__stat {
++  font-size: 0.8rem;
++  color: var(--ink-muted);
++}
++
++.topic-row__track {
++  width: 100%;
++  height: 5px;
++  background: var(--surface-sunken);
++  border-radius: 999px;
++  overflow: hidden;
++}
++
++.topic-row__fill {
+   height: 100%;
+-  background: #ff6b4a;
++  background: var(--topic-color);
+   border-radius: 999px;
+   transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1);
+ }
+@@ -209,7 +381,6 @@ body {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 0.5rem;
+-  margin-top: 1.75rem;
+   margin-bottom: 1.75rem;
+ }
+ 
+@@ -681,18 +852,3 @@ body {
+   color: var(--ink-muted);
+   font-size: 0.85rem;
+ }
+-
+-/* ==========================================================================
+-   Footer
+-   ========================================================================== */
+-
+-.site-footer {
+-  border-top: 1px solid var(--border-subtle);
+-  color: var(--ink-muted);
+-  font-size: 0.78rem;
+-}
+-
+-.footer-inner {
+-  padding-top: 1.5rem;
+-  padding-bottom: 1.5rem;
+-}
