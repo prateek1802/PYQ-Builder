@@ -1,0 +1,455 @@
+diff --git a/src/app.ts b/src/app.ts
+index 1042a53..0134f15 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -2,9 +2,16 @@
+  * ExamForge — app logic (TypeScript).
+  *
+  * Bundled by Vite. All progress lives in localStorage. No framework —
+- * plain DOM manipulation with a minimal hash router for two views
+- * (Practice / Progress), rendered into the persistent sidebar shell
+- * defined in index.html.
++ * plain DOM manipulation with a minimal hash router across three views,
++ * rendered into the persistent sidebar shell defined in index.html:
++ *
++ *   #/exam/<name>              — topic cards for that exam (the landing
++ *                                 page after clicking an exam; NOT a
++ *                                 question directly)
++ *   #/exam/<name>/topic/<t>    — one-question-at-a-time practice, scoped
++ *                                 to that topic (or "all" for every
++ *                                 question in the exam)
++ *   #/progress                 — mastery breakdown across everything
+  */
+ 
+ import { QUESTIONS } from "./data/questions";
+@@ -61,11 +68,13 @@ const PROGRESS_NAV_ICON =
+   '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 14V2M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11V8M8.5 11V5.5M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+ 
+ let progress: ProgressMap = loadProgress();
+-let activeTopic = "all";
+ let currentIndex = 0;
+-let currentExamName: string | null = null;
++let currentSessionKey: string | null = null;
+ 
+-type Route = { kind: "practice"; examName: string } | { kind: "progress" };
++type Route =
++  | { kind: "topics"; examName: string }
++  | { kind: "practice"; examName: string; topic: string }
++  | { kind: "progress" };
+ 
+ function getAllExamNames(): string[] {
+   return Array.from(new Set(QUESTIONS.map((q) => q.examName))).sort();
+@@ -156,15 +165,26 @@ function getRoute(): Route {
+   if (hash === "progress") return { kind: "progress" };
+ 
+   const exams = getAllExamNames();
+-  const examMatch = hash.match(/^exam\/(.+)$/);
+-  if (examMatch) {
+-    const decoded = decodeURIComponent(examMatch[1]);
+-    if (exams.includes(decoded)) {
+-      return { kind: "practice", examName: decoded };
++
++  const practiceMatch = hash.match(/^exam\/([^/]+)\/topic\/(.+)$/);
++  if (practiceMatch) {
++    const examName = decodeURIComponent(practiceMatch[1]);
++    const topic = decodeURIComponent(practiceMatch[2]);
++    if (exams.includes(examName)) {
++      return { kind: "practice", examName, topic };
++    }
++  }
++
++  const topicsMatch = hash.match(/^exam\/([^/]+)$/);
++  if (topicsMatch) {
++    const examName = decodeURIComponent(topicsMatch[1]);
++    if (exams.includes(examName)) {
++      return { kind: "topics", examName };
+     }
+   }
+-  // No valid route in the hash — fall back to the first exam alphabetically.
+-  return { kind: "practice", examName: exams[0] ?? "" };
++
++  // No valid route in the hash — fall back to the first exam's topic list.
++  return { kind: "topics", examName: exams[0] ?? "" };
+ }
+ 
+ function setActiveNav(route: Route): void {
+@@ -174,7 +194,7 @@ function setActiveNav(route: Route): void {
+     } else {
+       link.classList.toggle(
+         "is-active",
+-        link.dataset.route === "practice" && link.dataset.exam === route.examName
++        link.dataset.route === "exam" && link.dataset.exam === route.examName
+       );
+     }
+   });
+@@ -185,8 +205,10 @@ function renderRoute(): void {
+   setActiveNav(route);
+   if (route.kind === "progress") {
+     renderProgressView(viewRoot);
++  } else if (route.kind === "topics") {
++    renderTopicsView(viewRoot, route.examName);
+   } else {
+-    renderPracticeView(viewRoot, route.examName);
++    renderPracticeView(viewRoot, route.examName, route.topic);
+   }
+ }
+ 
+@@ -197,7 +219,7 @@ function renderSidebarNav(): void {
+     const btn = document.createElement("button");
+     btn.type = "button";
+     btn.className = "nav-link";
+-    btn.dataset.route = "practice";
++    btn.dataset.route = "exam";
+     btn.dataset.exam = examName;
+     btn.innerHTML = `${EXAM_NAV_ICON} ${escapeHtml(examName)}`;
+     btn.addEventListener("click", () => {
+@@ -225,30 +247,40 @@ function renderSidebarNav(): void {
+ }
+ 
+ // ---------------------------------------------------------------
+-// Practice view
++// Topics view — the exam landing page. Clicking an exam in the sidebar
++// lands here, not on a question directly: a grid of topic cards to
++// choose from, plus an "All topics" card for a straight-through session.
+ // ---------------------------------------------------------------
+ 
+-function renderPracticeView(root: HTMLElement, examName: string): void {
+-  if (examName !== currentExamName) {
+-    currentExamName = examName;
+-    activeTopic = "all";
+-    currentIndex = 0;
+-  }
+-
++function renderTopicsView(root: HTMLElement, examName: string): void {
+   const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
+   const total = examQuestions.length;
+   const mastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
+   const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
+   const topics = Array.from(new Set(examQuestions.map((q) => q.topic))).sort();
+-  const visible =
+-    activeTopic === "all" ? examQuestions : examQuestions.filter((q) => q.topic === activeTopic);
++
++  const topicCardsHtml = topics
++    .map((topic) => {
++      const tQuestions = examQuestions.filter((q) => q.topic === topic);
++      const tMastered = tQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
++      const tPct = tQuestions.length === 0 ? 0 : Math.round((tMastered / tQuestions.length) * 100);
++      return `
++        <button type="button" class="topic-card" data-topic="${escapeHtml(topic)}" style="--topic-color:${colorForTopic(topic)}">
++          <span class="topic-card__dot" aria-hidden="true"></span>
++          <span class="topic-card__name">${escapeHtml(topic)}</span>
++          <span class="topic-card__stat font-tabular">${tMastered} / ${tQuestions.length} mastered</span>
++          <div class="topic-card__track"><div class="topic-card__fill" style="width:${tPct}%"></div></div>
++        </button>
++      `;
++    })
++    .join("");
+ 
+   root.innerHTML = `
+     <div class="view-inner">
+       <div class="stat-card">
+         <span class="stat-card__eyebrow">Practice</span>
+         <h1 class="stat-card__title">${escapeHtml(examName)}</h1>
+-        <p class="stat-card__subtitle">Previous-year questions, worked two ways.</p>
++        <p class="stat-card__subtitle">Choose a topic to start practicing.</p>
+         <div class="stat-card__stat">
+           <span class="stat-card__label">Your progress</span>
+           <span class="stat-card__value font-tabular">${mastered} / ${total}</span>
+@@ -256,23 +288,68 @@ function renderPracticeView(root: HTMLElement, examName: string): void {
+           <div class="stat-card__track"><div class="stat-card__fill" style="width:${pct}%"></div></div>
+         </div>
+       </div>
+-      <div class="filter-row" id="filter-row"></div>
++
++      <div class="topic-card-grid">
++        <button type="button" class="topic-card topic-card--all" data-topic="all">
++          <span class="topic-card__name">All topics</span>
++          <span class="topic-card__stat font-tabular">${total} questions across ${topics.length} topics</span>
++        </button>
++        ${topicCardsHtml}
++      </div>
++    </div>
++  `;
++
++  root.querySelectorAll<HTMLButtonElement>("[data-topic]").forEach((btn) => {
++    btn.addEventListener("click", () => {
++      const topic = btn.dataset.topic!;
++      location.hash = `/exam/${encodeURIComponent(examName)}/topic/${encodeURIComponent(topic)}`;
++    });
++  });
++}
++
++// ---------------------------------------------------------------
++// Practice view — one question at a time, scoped to a single topic
++// (or "all" for the whole exam), reached only after picking from the
++// topics view.
++// ---------------------------------------------------------------
++
++function renderPracticeView(root: HTMLElement, examName: string, topic: string): void {
++  const sessionKey = `${examName}::${topic}`;
++  if (sessionKey !== currentSessionKey) {
++    currentSessionKey = sessionKey;
++    currentIndex = 0;
++  }
++
++  const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
++  const visible = topic === "all" ? examQuestions : examQuestions.filter((q) => q.topic === topic);
++  const topicLabel = topic === "all" ? "All topics" : topic;
++  const dotColor = topic === "all" ? "var(--brand-accent)" : colorForTopic(topic);
++
++  root.innerHTML = `
++    <div class="view-inner">
++      <div class="practice-header">
++        <button type="button" class="back-link" data-back>
++          ${ARROW_LEFT_ICON} Back to topics
++        </button>
++        <div class="practice-header__topic">
++          <span class="practice-header__dot" style="background:${dotColor}"></span>
++          <span class="practice-header__topic-name">${escapeHtml(topicLabel)}</span>
++        </div>
++      </div>
+       <div class="practice-nav" id="practice-nav-top"></div>
+       <div class="cards-container" id="cards-container"></div>
+       <div class="practice-nav practice-nav--bottom" id="practice-nav-bottom"></div>
+     </div>
+   `;
+ 
+-  const filterRowEl = root.querySelector<HTMLDivElement>("#filter-row")!;
++  root.querySelector<HTMLButtonElement>("[data-back]")!.addEventListener("click", () => {
++    location.hash = `/exam/${encodeURIComponent(examName)}`;
++  });
++
+   const cardsContainer = root.querySelector<HTMLDivElement>("#cards-container")!;
+   const navTopEl = root.querySelector<HTMLDivElement>("#practice-nav-top")!;
+   const navBottomEl = root.querySelector<HTMLDivElement>("#practice-nav-bottom")!;
+ 
+-  const chipFrag = document.createDocumentFragment();
+-  chipFrag.appendChild(makeChip("All topics", "all", root, examName));
+-  topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root, examName)));
+-  filterRowEl.appendChild(chipFrag);
+-
+   if (currentIndex > visible.length - 1) {
+     currentIndex = Math.max(0, visible.length - 1);
+   }
+@@ -288,13 +365,13 @@ function renderPracticeView(root: HTMLElement, examName: string): void {
+     return;
+   }
+ 
+-  cardsContainer.appendChild(renderCard(visible[currentIndex], root, examName));
++  cardsContainer.appendChild(renderCard(visible[currentIndex], root, examName, topic));
+ 
+   root.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
+     btn.addEventListener("click", () => {
+       if (btn.dataset.nav === "prev" && currentIndex > 0) currentIndex--;
+       if (btn.dataset.nav === "next" && currentIndex < visible.length - 1) currentIndex++;
+-      renderPracticeView(root, examName);
++      renderPracticeView(root, examName, topic);
+     });
+   });
+ 
+@@ -321,24 +398,7 @@ function navBarHtml(index: number, total: number): string {
+   `;
+ }
+ 
+-function makeChip(label: string, value: string, root: HTMLElement, examName: string): HTMLButtonElement {
+-  const btn = document.createElement("button");
+-  btn.type = "button";
+-  btn.className = "filter-chip" + (value === activeTopic ? " is-active" : "");
+-  btn.textContent = label;
+-  btn.dataset.topic = value;
+-  if (value !== "all") {
+-    btn.style.setProperty("--topic-color", colorForTopic(value));
+-  }
+-  btn.addEventListener("click", () => {
+-    activeTopic = value;
+-    currentIndex = 0;
+-    renderPracticeView(root, examName);
+-  });
+-  return btn;
+-}
+-
+-function renderCard(q: Question, root: HTMLElement, examName: string): HTMLElement {
++function renderCard(q: Question, root: HTMLElement, examName: string, topic: string): HTMLElement {
+   const state = progress[q.id];
+   const isMastered = state?.confidence === "mastered";
+ 
+@@ -422,7 +482,7 @@ function renderCard(q: Question, root: HTMLElement, examName: string): HTMLEleme
+       const conf = chip.dataset.conf as ConfidenceLevel;
+       const wasMastered = progress[q.id]?.confidence === "mastered";
+       setConfidence(q.id, conf);
+-      renderPracticeView(root, examName);
++      renderPracticeView(root, examName, topic);
+       if (conf === "mastered" && !wasMastered) {
+         const refreshed = root.querySelector<HTMLElement>(`[data-id="${q.id}"] .q-card__stamp`);
+         if (refreshed) spawnConfetti(refreshed);
+@@ -456,7 +516,7 @@ function handleOptionClick(card: HTMLElement, q: Question, chosenIdx: number, ch
+ }
+ 
+ // ---------------------------------------------------------------
+-// Progress view — mastery breakdown per topic
++// Progress view — mastery breakdown per topic, across all exams
+ // ---------------------------------------------------------------
+ 
+ function renderProgressView(root: HTMLElement): void {
+diff --git a/src/styles.css b/src/styles.css
+index 7819dd6..d98d258 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -380,41 +380,135 @@ body {
+ }
+ 
+ /* ==========================================================================
+-   Filter row — each topic chip carries its own accent color via
+-   --topic-color, set inline by app.ts; "All topics" stays neutral ink.
++   Topic card grid — exam landing page. "All topics" spans full width as
++   the primary CTA (dark, matching the stat-card above it); individual
++   topic cards below carry their own accent via --topic-color.
+    ========================================================================== */
+ 
+-.filter-row {
++.topic-card-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
++  gap: 1rem;
++}
++
++.topic-card {
+   display: flex;
+-  flex-wrap: wrap;
+-  gap: 0.5rem;
+-  margin-bottom: 1.75rem;
++  flex-direction: column;
++  align-items: flex-start;
++  gap: 0.55rem;
++  text-align: left;
++  padding: 1.1rem 1.2rem;
++  background: var(--surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-radius: 1rem;
++  cursor: pointer;
++  transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease;
+ }
+ 
+-.filter-chip {
+-  font-family: var(--font-body);
+-  font-size: 0.82rem;
+-  font-weight: 600;
+-  padding: 0.42rem 0.9rem;
++.topic-card:hover {
++  box-shadow: var(--shadow-md);
++  transform: translateY(-2px);
++  border-color: var(--topic-color, var(--ink));
++}
++
++.topic-card__dot {
++  width: 0.65rem;
++  height: 0.65rem;
+   border-radius: 999px;
+-  border: 1.5px solid var(--border-subtle);
++  background: var(--topic-color);
++}
++
++.topic-card__name {
++  font-weight: 700;
++  font-size: 0.95rem;
++  color: var(--ink);
++}
++
++.topic-card__stat {
++  font-size: 0.78rem;
+   color: var(--ink-muted);
+-  background: var(--surface-raised);
++}
++
++.topic-card__track {
++  width: 100%;
++  height: 5px;
++  background: var(--surface-sunken);
++  border-radius: 999px;
++  overflow: hidden;
++  margin-top: 0.15rem;
++}
++
++.topic-card__fill {
++  height: 100%;
++  background: var(--topic-color);
++  border-radius: 999px;
++}
++
++.topic-card--all {
++  grid-column: 1 / -1;
++  background: var(--ink-dark);
++  border-color: var(--ink-dark);
++}
++.topic-card--all .topic-card__name {
++  color: var(--ink-dark-text);
++  font-size: 1.05rem;
++}
++.topic-card--all .topic-card__stat {
++  color: var(--ink-dark-text-muted);
++}
++.topic-card--all:hover {
++  border-color: var(--brand-accent);
++}
++
++/* ==========================================================================
++   Practice header — replaces the old inline topic filter chips. A back
++   link to the topics view, plus the current topic name and its color.
++   ========================================================================== */
++
++.practice-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 1rem;
++  margin-bottom: 1.5rem;
++}
++
++.back-link {
++  display: inline-flex;
++  align-items: center;
++  gap: 0.4rem;
++  font-family: var(--font-body);
++  font-weight: 700;
++  font-size: 0.85rem;
++  color: var(--ink-muted);
++  background: transparent;
++  border: none;
+   cursor: pointer;
+-  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 120ms ease;
+-  white-space: nowrap;
++  padding: 0;
+ }
+ 
+-.filter-chip:hover {
+-  border-color: var(--topic-color, var(--ink));
++.back-link:hover {
+   color: var(--ink);
+-  transform: translateY(-1px);
+ }
+ 
+-.filter-chip.is-active {
+-  background: var(--topic-color, var(--ink));
+-  border-color: transparent;
+-  color: #fff;
++.practice-header__topic {
++  display: flex;
++  align-items: center;
++  gap: 0.5rem;
++}
++
++.practice-header__dot {
++  width: 0.6rem;
++  height: 0.6rem;
++  border-radius: 999px;
++  flex-shrink: 0;
++}
++
++.practice-header__topic-name {
++  font-family: var(--font-display);
++  font-weight: 700;
++  font-size: 1.1rem;
++  color: var(--ink);
+ }
+ 
+ /* ==========================================================================

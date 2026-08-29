@@ -380,41 +380,135 @@ body {
 }
 
 /* ==========================================================================
-   Filter row — each topic chip carries its own accent color via
-   --topic-color, set inline by app.ts; "All topics" stays neutral ink.
+   Topic card grid — exam landing page. "All topics" spans full width as
+   the primary CTA (dark, matching the stat-card above it); individual
+   topic cards below carry their own accent via --topic-color.
    ========================================================================== */
 
-.filter-row {
+.topic-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.topic-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.75rem;
-}
-
-.filter-chip {
-  font-family: var(--font-body);
-  font-size: 0.82rem;
-  font-weight: 600;
-  padding: 0.42rem 0.9rem;
-  border-radius: 999px;
-  border: 1.5px solid var(--border-subtle);
-  color: var(--ink-muted);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  text-align: left;
+  padding: 1.1rem 1.2rem;
   background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 120ms ease;
-  white-space: nowrap;
+  transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease;
 }
 
-.filter-chip:hover {
+.topic-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
   border-color: var(--topic-color, var(--ink));
-  color: var(--ink);
-  transform: translateY(-1px);
 }
 
-.filter-chip.is-active {
-  background: var(--topic-color, var(--ink));
-  border-color: transparent;
-  color: #fff;
+.topic-card__dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: var(--topic-color);
+}
+
+.topic-card__name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.topic-card__stat {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+.topic-card__track {
+  width: 100%;
+  height: 5px;
+  background: var(--surface-sunken);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.15rem;
+}
+
+.topic-card__fill {
+  height: 100%;
+  background: var(--topic-color);
+  border-radius: 999px;
+}
+
+.topic-card--all {
+  grid-column: 1 / -1;
+  background: var(--ink-dark);
+  border-color: var(--ink-dark);
+}
+.topic-card--all .topic-card__name {
+  color: var(--ink-dark-text);
+  font-size: 1.05rem;
+}
+.topic-card--all .topic-card__stat {
+  color: var(--ink-dark-text-muted);
+}
+.topic-card--all:hover {
+  border-color: var(--brand-accent);
+}
+
+/* ==========================================================================
+   Practice header — replaces the old inline topic filter chips. A back
+   link to the topics view, plus the current topic name and its color.
+   ========================================================================== */
+
+.practice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.back-link:hover {
+  color: var(--ink);
+}
+
+.practice-header__topic {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.practice-header__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.practice-header__topic-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--ink);
 }
 
 /* ==========================================================================
