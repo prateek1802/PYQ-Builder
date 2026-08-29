@@ -411,6 +411,57 @@ body {
 }
 
 /* ==========================================================================
+   Practice nav — Prev/Next + counter, replacing a long scrolling card
+   feed with a one-question-at-a-time flow. Appears above and below the
+   single rendered card.
+   ========================================================================== */
+
+.practice-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.practice-nav--bottom {
+  margin-top: 1.25rem;
+  margin-bottom: 0;
+}
+
+.practice-nav__counter {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+
+.nav-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-subtle);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 120ms ease, opacity 140ms ease;
+}
+
+.nav-arrow:hover:not(:disabled) {
+  border-color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.nav-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
    Question cards
    ========================================================================== */
 

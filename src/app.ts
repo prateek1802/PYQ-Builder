@@ -48,8 +48,15 @@ const CROSS_ICON =
 const STAR_ICON =
   '<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8 1.5L9.8 5.6L14.2 6.1L11 9.1L11.8 13.5L8 11.3L4.2 13.5L5 9.1L1.8 6.1L6.2 5.6L8 1.5Z"/></svg>';
 
+const ARROW_LEFT_ICON =
+  '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const ARROW_RIGHT_ICON =
+  '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 let progress: ProgressMap = loadProgress();
 let activeTopic = "all";
+let currentIndex = 0;
 
 type Route = "practice" | "progress";
 const DEFAULT_ROUTE: Route = "practice";
@@ -180,17 +187,28 @@ function renderPracticeView(root: HTMLElement): void {
         </div>
       </div>
       <div class="filter-row" id="filter-row"></div>
+      <div class="practice-nav" id="practice-nav-top"></div>
       <div class="cards-container" id="cards-container"></div>
+      <div class="practice-nav practice-nav--bottom" id="practice-nav-bottom"></div>
     </div>
   `;
 
   const filterRowEl = root.querySelector<HTMLDivElement>("#filter-row")!;
   const cardsContainer = root.querySelector<HTMLDivElement>("#cards-container")!;
+  const navTopEl = root.querySelector<HTMLDivElement>("#practice-nav-top")!;
+  const navBottomEl = root.querySelector<HTMLDivElement>("#practice-nav-bottom")!;
 
   const chipFrag = document.createDocumentFragment();
   chipFrag.appendChild(makeChip("All topics", "all", root));
   topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root)));
   filterRowEl.appendChild(chipFrag);
+
+  if (currentIndex > visible.length - 1) {
+    currentIndex = Math.max(0, visible.length - 1);
+  }
+
+  navTopEl.innerHTML = navBarHtml(currentIndex, visible.length);
+  navBottomEl.innerHTML = navBarHtml(currentIndex, visible.length);
 
   if (visible.length === 0) {
     const empty = document.createElement("div");
@@ -200,9 +218,15 @@ function renderPracticeView(root: HTMLElement): void {
     return;
   }
 
-  const cardsFrag = document.createDocumentFragment();
-  visible.forEach((q) => cardsFrag.appendChild(renderCard(q, root)));
-  cardsContainer.appendChild(cardsFrag);
+  cardsContainer.appendChild(renderCard(visible[currentIndex], root));
+
+  root.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.nav === "prev" && currentIndex > 0) currentIndex--;
+      if (btn.dataset.nav === "next" && currentIndex < visible.length - 1) currentIndex++;
+      renderPracticeView(root);
+    });
+  });
 
   window.renderMathInElement?.(cardsContainer, {
     delimiters: [
@@ -211,6 +235,20 @@ function renderPracticeView(root: HTMLElement): void {
     ],
     throwOnError: false
   });
+}
+
+function navBarHtml(index: number, total: number): string {
+  const atStart = index <= 0;
+  const atEnd = total === 0 || index >= total - 1;
+  return `
+    <button type="button" class="nav-arrow" data-nav="prev" ${atStart ? "disabled" : ""}>
+      ${ARROW_LEFT_ICON} Prev
+    </button>
+    <span class="practice-nav__counter font-tabular">${total === 0 ? "0 / 0" : `${index + 1} / ${total}`}</span>
+    <button type="button" class="nav-arrow" data-nav="next" ${atEnd ? "disabled" : ""}>
+      Next ${ARROW_RIGHT_ICON}
+    </button>
+  `;
 }
 
 function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonElement {
@@ -224,6 +262,7 @@ function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonEl
   }
   btn.addEventListener("click", () => {
     activeTopic = value;
+    currentIndex = 0;
     renderPracticeView(root);
   });
   return btn;
