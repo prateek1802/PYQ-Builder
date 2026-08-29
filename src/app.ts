@@ -54,12 +54,22 @@ const ARROW_LEFT_ICON =
 const ARROW_RIGHT_ICON =
   '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+const EXAM_NAV_ICON =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h5A1.5 1.5 0 0 1 10 3.5v9A1.5 1.5 0 0 1 8.5 14h-5A1.5 1.5 0 0 1 2 12.5v-9Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 5.5 14 6.7v5.6L12 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const PROGRESS_NAV_ICON =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 14V2M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11V8M8.5 11V5.5M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
 let progress: ProgressMap = loadProgress();
 let activeTopic = "all";
 let currentIndex = 0;
+let currentExamName: string | null = null;
 
-type Route = "practice" | "progress";
-const DEFAULT_ROUTE: Route = "practice";
+type Route = { kind: "practice"; examName: string } | { kind: "progress" };
+
+function getAllExamNames(): string[] {
+  return Array.from(new Set(QUESTIONS.map((q) => q.examName))).sort();
+}
 
 function requireEl<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -143,42 +153,102 @@ function spawnConfetti(originEl: HTMLElement): void {
 
 function getRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
-  return hash === "progress" ? "progress" : DEFAULT_ROUTE;
+  if (hash === "progress") return { kind: "progress" };
+
+  const exams = getAllExamNames();
+  const examMatch = hash.match(/^exam\/(.+)$/);
+  if (examMatch) {
+    const decoded = decodeURIComponent(examMatch[1]);
+    if (exams.includes(decoded)) {
+      return { kind: "practice", examName: decoded };
+    }
+  }
+  // No valid route in the hash — fall back to the first exam alphabetically.
+  return { kind: "practice", examName: exams[0] ?? "" };
 }
 
 function setActiveNav(route: Route): void {
   sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
-    link.classList.toggle("is-active", link.dataset.route === route);
+    if (route.kind === "progress") {
+      link.classList.toggle("is-active", link.dataset.route === "progress");
+    } else {
+      link.classList.toggle(
+        "is-active",
+        link.dataset.route === "practice" && link.dataset.exam === route.examName
+      );
+    }
   });
 }
 
 function renderRoute(): void {
   const route = getRoute();
   setActiveNav(route);
-  if (route === "progress") {
+  if (route.kind === "progress") {
     renderProgressView(viewRoot);
   } else {
-    renderPracticeView(viewRoot);
+    renderPracticeView(viewRoot, route.examName);
   }
+}
+
+function renderSidebarNav(): void {
+  const frag = document.createDocumentFragment();
+
+  getAllExamNames().forEach((examName) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-link";
+    btn.dataset.route = "practice";
+    btn.dataset.exam = examName;
+    btn.innerHTML = `${EXAM_NAV_ICON} ${escapeHtml(examName)}`;
+    btn.addEventListener("click", () => {
+      location.hash = `/exam/${encodeURIComponent(examName)}`;
+    });
+    frag.appendChild(btn);
+  });
+
+  const divider = document.createElement("div");
+  divider.className = "sidebar__divider";
+  frag.appendChild(divider);
+
+  const progressBtn = document.createElement("button");
+  progressBtn.type = "button";
+  progressBtn.className = "nav-link";
+  progressBtn.dataset.route = "progress";
+  progressBtn.innerHTML = `${PROGRESS_NAV_ICON} Progress`;
+  progressBtn.addEventListener("click", () => {
+    location.hash = "/progress";
+  });
+  frag.appendChild(progressBtn);
+
+  sidebarNav.innerHTML = "";
+  sidebarNav.appendChild(frag);
 }
 
 // ---------------------------------------------------------------
 // Practice view
 // ---------------------------------------------------------------
 
-function renderPracticeView(root: HTMLElement): void {
-  const total = QUESTIONS.length;
-  const mastered = QUESTIONS.filter((q) => progress[q.id]?.confidence === "mastered").length;
+function renderPracticeView(root: HTMLElement, examName: string): void {
+  if (examName !== currentExamName) {
+    currentExamName = examName;
+    activeTopic = "all";
+    currentIndex = 0;
+  }
+
+  const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
+  const total = examQuestions.length;
+  const mastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
   const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
-  const topics = Array.from(new Set(QUESTIONS.map((q) => q.topic))).sort();
-  const visible = activeTopic === "all" ? QUESTIONS : QUESTIONS.filter((q) => q.topic === activeTopic);
+  const topics = Array.from(new Set(examQuestions.map((q) => q.topic))).sort();
+  const visible =
+    activeTopic === "all" ? examQuestions : examQuestions.filter((q) => q.topic === activeTopic);
 
   root.innerHTML = `
     <div class="view-inner">
       <div class="stat-card">
         <span class="stat-card__eyebrow">Practice</span>
-        <h1 class="stat-card__title">Quant PYQs</h1>
-        <p class="stat-card__subtitle">Previous-year quant questions, worked two ways.</p>
+        <h1 class="stat-card__title">${escapeHtml(examName)}</h1>
+        <p class="stat-card__subtitle">Previous-year questions, worked two ways.</p>
         <div class="stat-card__stat">
           <span class="stat-card__label">Your progress</span>
           <span class="stat-card__value font-tabular">${mastered} / ${total}</span>
@@ -199,8 +269,8 @@ function renderPracticeView(root: HTMLElement): void {
   const navBottomEl = root.querySelector<HTMLDivElement>("#practice-nav-bottom")!;
 
   const chipFrag = document.createDocumentFragment();
-  chipFrag.appendChild(makeChip("All topics", "all", root));
-  topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root)));
+  chipFrag.appendChild(makeChip("All topics", "all", root, examName));
+  topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root, examName)));
   filterRowEl.appendChild(chipFrag);
 
   if (currentIndex > visible.length - 1) {
@@ -218,13 +288,13 @@ function renderPracticeView(root: HTMLElement): void {
     return;
   }
 
-  cardsContainer.appendChild(renderCard(visible[currentIndex], root));
+  cardsContainer.appendChild(renderCard(visible[currentIndex], root, examName));
 
   root.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.dataset.nav === "prev" && currentIndex > 0) currentIndex--;
       if (btn.dataset.nav === "next" && currentIndex < visible.length - 1) currentIndex++;
-      renderPracticeView(root);
+      renderPracticeView(root, examName);
     });
   });
 
@@ -251,7 +321,7 @@ function navBarHtml(index: number, total: number): string {
   `;
 }
 
-function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonElement {
+function makeChip(label: string, value: string, root: HTMLElement, examName: string): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "filter-chip" + (value === activeTopic ? " is-active" : "");
@@ -263,12 +333,12 @@ function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonEl
   btn.addEventListener("click", () => {
     activeTopic = value;
     currentIndex = 0;
-    renderPracticeView(root);
+    renderPracticeView(root, examName);
   });
   return btn;
 }
 
-function renderCard(q: Question, root: HTMLElement): HTMLElement {
+function renderCard(q: Question, root: HTMLElement, examName: string): HTMLElement {
   const state = progress[q.id];
   const isMastered = state?.confidence === "mastered";
 
@@ -352,7 +422,7 @@ function renderCard(q: Question, root: HTMLElement): HTMLElement {
       const conf = chip.dataset.conf as ConfidenceLevel;
       const wasMastered = progress[q.id]?.confidence === "mastered";
       setConfidence(q.id, conf);
-      renderPracticeView(root);
+      renderPracticeView(root, examName);
       if (conf === "mastered" && !wasMastered) {
         const refreshed = root.querySelector<HTMLElement>(`[data-id="${q.id}"] .q-card__stamp`);
         if (refreshed) spawnConfetti(refreshed);
@@ -464,13 +534,7 @@ export function initApp(): void {
     return;
   }
 
-  sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
-    link.addEventListener("click", () => {
-      const route = link.dataset.route as Route;
-      location.hash = "/" + route;
-    });
-  });
-
+  renderSidebarNav();
   window.addEventListener("hashchange", renderRoute);
   renderRoute();
 }

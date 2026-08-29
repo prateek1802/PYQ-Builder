@@ -11,6 +11,14 @@ export type ConfidenceLevel = "again" | "learning" | "mastered";
 export interface Question {
   /** Unique, stable id. Also the localStorage progress key — never reuse. */
   id: string;
+  /**
+   * The exam family this question belongs to, e.g. "SSC CGL" or "SSC CHSL".
+   * This is what the sidebar groups and navigates by — one nav link per
+   * distinct examName found in the data, no code changes needed to add
+   * a new exam beyond adding questions with a new examName.
+   */
+  examName: string;
+  /** Specific sitting/year label shown on the card, e.g. "SSC CGL 2019". */
   exam: string;
   tier: string;
   topic: string;

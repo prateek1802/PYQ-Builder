@@ -1,0 +1,429 @@
+diff --git a/index.html b/index.html
+index a41bb6e..68557ca 100644
+--- a/index.html
++++ b/index.html
+@@ -26,18 +26,12 @@
+         <span class="hero-accent-bar" aria-hidden="true"></span>
+         <span class="sidebar__brand-text">ExamForge</span>
+       </div>
+-      <p class="sidebar__eyebrow">SSC CGL · Tier 1 · Quant</p>
+-
+-      <nav class="sidebar__nav" id="sidebar-nav" aria-label="Main">
+-        <button type="button" class="nav-link" data-route="practice">
+-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h5A1.5 1.5 0 0 1 10 3.5v9A1.5 1.5 0 0 1 8.5 14h-5A1.5 1.5 0 0 1 2 12.5v-9Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 5.5 14 6.7v5.6L12 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+-          Practice
+-        </button>
+-        <button type="button" class="nav-link" data-route="progress">
+-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 14V2M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11V8M8.5 11V5.5M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+-          Progress
+-        </button>
+-      </nav>
++      <p class="sidebar__eyebrow">Previous year questions</p>
++
++      <!-- Populated by app.ts: one nav link per exam found in the question
++           data (renderSidebarNav), plus a Progress link. Nothing here is
++           hardcoded to a specific exam. -->
++      <nav class="sidebar__nav" id="sidebar-nav" aria-label="Main"></nav>
+ 
+       <p class="sidebar__footnote">Progress is stored locally in this browser only. No account, no server.</p>
+     </aside>
+diff --git a/src/app.ts b/src/app.ts
+index c3d1e3a..1042a53 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -54,12 +54,22 @@ const ARROW_LEFT_ICON =
+ const ARROW_RIGHT_ICON =
+   '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+ 
++const EXAM_NAV_ICON =
++  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h5A1.5 1.5 0 0 1 10 3.5v9A1.5 1.5 0 0 1 8.5 14h-5A1.5 1.5 0 0 1 2 12.5v-9Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 5.5 14 6.7v5.6L12 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
++
++const PROGRESS_NAV_ICON =
++  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 14V2M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11V8M8.5 11V5.5M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
++
+ let progress: ProgressMap = loadProgress();
+ let activeTopic = "all";
+ let currentIndex = 0;
++let currentExamName: string | null = null;
+ 
+-type Route = "practice" | "progress";
+-const DEFAULT_ROUTE: Route = "practice";
++type Route = { kind: "practice"; examName: string } | { kind: "progress" };
++
++function getAllExamNames(): string[] {
++  return Array.from(new Set(QUESTIONS.map((q) => q.examName))).sort();
++}
+ 
+ function requireEl<T extends HTMLElement>(id: string): T {
+   const el = document.getElementById(id);
+@@ -143,42 +153,102 @@ function spawnConfetti(originEl: HTMLElement): void {
+ 
+ function getRoute(): Route {
+   const hash = location.hash.replace(/^#\/?/, "");
+-  return hash === "progress" ? "progress" : DEFAULT_ROUTE;
++  if (hash === "progress") return { kind: "progress" };
++
++  const exams = getAllExamNames();
++  const examMatch = hash.match(/^exam\/(.+)$/);
++  if (examMatch) {
++    const decoded = decodeURIComponent(examMatch[1]);
++    if (exams.includes(decoded)) {
++      return { kind: "practice", examName: decoded };
++    }
++  }
++  // No valid route in the hash — fall back to the first exam alphabetically.
++  return { kind: "practice", examName: exams[0] ?? "" };
+ }
+ 
+ function setActiveNav(route: Route): void {
+   sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
+-    link.classList.toggle("is-active", link.dataset.route === route);
++    if (route.kind === "progress") {
++      link.classList.toggle("is-active", link.dataset.route === "progress");
++    } else {
++      link.classList.toggle(
++        "is-active",
++        link.dataset.route === "practice" && link.dataset.exam === route.examName
++      );
++    }
+   });
+ }
+ 
+ function renderRoute(): void {
+   const route = getRoute();
+   setActiveNav(route);
+-  if (route === "progress") {
++  if (route.kind === "progress") {
+     renderProgressView(viewRoot);
+   } else {
+-    renderPracticeView(viewRoot);
++    renderPracticeView(viewRoot, route.examName);
+   }
+ }
+ 
++function renderSidebarNav(): void {
++  const frag = document.createDocumentFragment();
++
++  getAllExamNames().forEach((examName) => {
++    const btn = document.createElement("button");
++    btn.type = "button";
++    btn.className = "nav-link";
++    btn.dataset.route = "practice";
++    btn.dataset.exam = examName;
++    btn.innerHTML = `${EXAM_NAV_ICON} ${escapeHtml(examName)}`;
++    btn.addEventListener("click", () => {
++      location.hash = `/exam/${encodeURIComponent(examName)}`;
++    });
++    frag.appendChild(btn);
++  });
++
++  const divider = document.createElement("div");
++  divider.className = "sidebar__divider";
++  frag.appendChild(divider);
++
++  const progressBtn = document.createElement("button");
++  progressBtn.type = "button";
++  progressBtn.className = "nav-link";
++  progressBtn.dataset.route = "progress";
++  progressBtn.innerHTML = `${PROGRESS_NAV_ICON} Progress`;
++  progressBtn.addEventListener("click", () => {
++    location.hash = "/progress";
++  });
++  frag.appendChild(progressBtn);
++
++  sidebarNav.innerHTML = "";
++  sidebarNav.appendChild(frag);
++}
++
+ // ---------------------------------------------------------------
+ // Practice view
+ // ---------------------------------------------------------------
+ 
+-function renderPracticeView(root: HTMLElement): void {
+-  const total = QUESTIONS.length;
+-  const mastered = QUESTIONS.filter((q) => progress[q.id]?.confidence === "mastered").length;
++function renderPracticeView(root: HTMLElement, examName: string): void {
++  if (examName !== currentExamName) {
++    currentExamName = examName;
++    activeTopic = "all";
++    currentIndex = 0;
++  }
++
++  const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
++  const total = examQuestions.length;
++  const mastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
+   const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
+-  const topics = Array.from(new Set(QUESTIONS.map((q) => q.topic))).sort();
+-  const visible = activeTopic === "all" ? QUESTIONS : QUESTIONS.filter((q) => q.topic === activeTopic);
++  const topics = Array.from(new Set(examQuestions.map((q) => q.topic))).sort();
++  const visible =
++    activeTopic === "all" ? examQuestions : examQuestions.filter((q) => q.topic === activeTopic);
+ 
+   root.innerHTML = `
+     <div class="view-inner">
+       <div class="stat-card">
+         <span class="stat-card__eyebrow">Practice</span>
+-        <h1 class="stat-card__title">Quant PYQs</h1>
+-        <p class="stat-card__subtitle">Previous-year quant questions, worked two ways.</p>
++        <h1 class="stat-card__title">${escapeHtml(examName)}</h1>
++        <p class="stat-card__subtitle">Previous-year questions, worked two ways.</p>
+         <div class="stat-card__stat">
+           <span class="stat-card__label">Your progress</span>
+           <span class="stat-card__value font-tabular">${mastered} / ${total}</span>
+@@ -199,8 +269,8 @@ function renderPracticeView(root: HTMLElement): void {
+   const navBottomEl = root.querySelector<HTMLDivElement>("#practice-nav-bottom")!;
+ 
+   const chipFrag = document.createDocumentFragment();
+-  chipFrag.appendChild(makeChip("All topics", "all", root));
+-  topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root)));
++  chipFrag.appendChild(makeChip("All topics", "all", root, examName));
++  topics.forEach((topic) => chipFrag.appendChild(makeChip(topic, topic, root, examName)));
+   filterRowEl.appendChild(chipFrag);
+ 
+   if (currentIndex > visible.length - 1) {
+@@ -218,13 +288,13 @@ function renderPracticeView(root: HTMLElement): void {
+     return;
+   }
+ 
+-  cardsContainer.appendChild(renderCard(visible[currentIndex], root));
++  cardsContainer.appendChild(renderCard(visible[currentIndex], root, examName));
+ 
+   root.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
+     btn.addEventListener("click", () => {
+       if (btn.dataset.nav === "prev" && currentIndex > 0) currentIndex--;
+       if (btn.dataset.nav === "next" && currentIndex < visible.length - 1) currentIndex++;
+-      renderPracticeView(root);
++      renderPracticeView(root, examName);
+     });
+   });
+ 
+@@ -251,7 +321,7 @@ function navBarHtml(index: number, total: number): string {
+   `;
+ }
+ 
+-function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonElement {
++function makeChip(label: string, value: string, root: HTMLElement, examName: string): HTMLButtonElement {
+   const btn = document.createElement("button");
+   btn.type = "button";
+   btn.className = "filter-chip" + (value === activeTopic ? " is-active" : "");
+@@ -263,12 +333,12 @@ function makeChip(label: string, value: string, root: HTMLElement): HTMLButtonEl
+   btn.addEventListener("click", () => {
+     activeTopic = value;
+     currentIndex = 0;
+-    renderPracticeView(root);
++    renderPracticeView(root, examName);
+   });
+   return btn;
+ }
+ 
+-function renderCard(q: Question, root: HTMLElement): HTMLElement {
++function renderCard(q: Question, root: HTMLElement, examName: string): HTMLElement {
+   const state = progress[q.id];
+   const isMastered = state?.confidence === "mastered";
+ 
+@@ -352,7 +422,7 @@ function renderCard(q: Question, root: HTMLElement): HTMLElement {
+       const conf = chip.dataset.conf as ConfidenceLevel;
+       const wasMastered = progress[q.id]?.confidence === "mastered";
+       setConfidence(q.id, conf);
+-      renderPracticeView(root);
++      renderPracticeView(root, examName);
+       if (conf === "mastered" && !wasMastered) {
+         const refreshed = root.querySelector<HTMLElement>(`[data-id="${q.id}"] .q-card__stamp`);
+         if (refreshed) spawnConfetti(refreshed);
+@@ -464,13 +534,7 @@ export function initApp(): void {
+     return;
+   }
+ 
+-  sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
+-    link.addEventListener("click", () => {
+-      const route = link.dataset.route as Route;
+-      location.hash = "/" + route;
+-    });
+-  });
+-
++  renderSidebarNav();
+   window.addEventListener("hashchange", renderRoute);
+   renderRoute();
+ }
+diff --git a/src/data/questions.ts b/src/data/questions.ts
+index e8af962..33341cf 100644
+--- a/src/data/questions.ts
++++ b/src/data/questions.ts
+@@ -8,7 +8,8 @@
+  *
+  * {
+  *   id: "unique-string-id",
+- *   exam: "SSC CGL 2024",
++ *   examName: "SSC CGL",          // the exam family — sidebar groups/routes by this
++ *   exam: "SSC CGL 2024",         // the specific sitting/year, shown on the card
+  *   tier: "Tier 1",
+  *   topic: "Algebra",
+  *   question: "LaTeX-ready string, e.g. If $x + \\frac{1}{x} = 5$ ...",
+@@ -34,6 +35,7 @@ import type { Question } from "../types";
+ export const QUESTIONS: Question[] = [
+   {
+     id: "q-alg-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2019",
+     tier: "Tier 1",
+     topic: "Algebra",
+@@ -48,6 +50,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-per-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2021",
+     tier: "Tier 1",
+     topic: "Percentage",
+@@ -62,6 +65,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-pl-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2022",
+     tier: "Tier 1",
+     topic: "Profit & Loss",
+@@ -76,6 +80,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-tw-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2020",
+     tier: "Tier 1",
+     topic: "Time & Work",
+@@ -90,6 +95,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-ci-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2018",
+     tier: "Tier 1",
+     topic: "Simple & Compound Interest",
+@@ -104,6 +110,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-geo-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2023",
+     tier: "Tier 1",
+     topic: "Geometry",
+@@ -118,6 +125,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-trig-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2021",
+     tier: "Tier 1",
+     topic: "Trigonometry",
+@@ -132,6 +140,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-avg-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2019",
+     tier: "Tier 1",
+     topic: "Average",
+@@ -146,6 +155,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-ratio-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2022",
+     tier: "Tier 1",
+     topic: "Ratio & Proportion",
+@@ -160,6 +170,7 @@ export const QUESTIONS: Question[] = [
+   },
+   {
+     id: "q-num-01",
++    examName: "SSC CGL",
+     exam: "SSC CGL 2023",
+     tier: "Tier 1",
+     topic: "Number System",
+@@ -170,6 +181,41 @@ export const QUESTIONS: Question[] = [
+       "Step 1: Find the remainder cycle of powers of $2$ modulo $7$.\n\n$$2^1 \\equiv 2,\\quad 2^2 \\equiv 4,\\quad 2^3 \\equiv 1 \\pmod 7$$\n\nStep 2: The remainders repeat with a cycle length of $3$ (since $2^3 \\equiv 1$).\n\nStep 3: Divide the exponent $100$ by the cycle length $3$.\n\n$$100 = 3 \\times 33 + 1$$\n\nStep 4: So $2^{100} \\equiv (2^3)^{33} \\times 2^1 \\equiv 1^{33} \\times 2 \\equiv 2 \\pmod 7$.",
+     shortcutSolution:
+       "For 'remainder of $a^n$ divided by $m$' questions, only the exponent's remainder on division by the cycle length matters.\n\nHere the cycle length is $3$ (found instantly: keep multiplying by 2 mod 7 until you hit 1 — it takes 3 steps). Just take $100 \\bmod 3 = 1$, then read off the $1^{\\text{st}}$ term of the cycle $(2, 4, 1, 2, 4, 1, \\ldots)$, which is $2$. No large powers ever get computed."
++  },
++
++  // ---------------------------------------------------------------
++  // A second exam family, demonstrating the sidebar's exam switching.
++  // Real, correctly-solved questions — but only 2, since this exists to
++  // prove the routing works, not as a real SSC CHSL question bank yet.
++  // Delete or expand freely; nothing else in the app needs to change.
++  // ---------------------------------------------------------------
++  {
++    id: "q-chsl-per-01",
++    examName: "SSC CHSL",
++    exam: "SSC CHSL 2023",
++    tier: "Tier 1",
++    topic: "Percentage",
++    question: "If $40\\%$ of a number is $96$, find the number.",
++    options: ["220", "240", "260", "280"],
++    correctIndex: 1,
++    basicSolution:
++      "Step 1: Let the number be $x$. We're told $40\\%$ of $x$ is $96$.\n\n$$0.40 \\times x = 96$$\n\nStep 2: Solve for $x$.\n\n$$x = \\dfrac{96}{0.40} = 240$$",
++    shortcutSolution:
++      "Read it as a fraction instead of a decimal: $40\\% = \\dfrac{2}{5}$, so $\\dfrac{2}{5}$ of the number is $96$.\n\n$$\\text{Number} = 96 \\times \\dfrac{5}{2} = 48 \\times 5 = 240$$\n\nHalving then multiplying by 5 is faster mental math than dividing by $0.4$."
++  },
++  {
++    id: "q-chsl-avg-01",
++    examName: "SSC CHSL",
++    exam: "SSC CHSL 2022",
++    tier: "Tier 1",
++    topic: "Average",
++    question: "Find the average of the first $10$ natural numbers.",
++    options: ["5", "5.5", "6", "4.5"],
++    correctIndex: 1,
++    basicSolution:
++      "Step 1: Sum of the first $10$ natural numbers using $\\dfrac{n(n+1)}{2}$.\n\n$$\\dfrac{10 \\times 11}{2} = 55$$\n\nStep 2: Divide by the count, $10$.\n\n$$\\dfrac{55}{10} = 5.5$$",
++    shortcutSolution:
++      "For the first $n$ natural numbers, the average is always $\\dfrac{n+1}{2}$ — no need to sum anything.\n\n$$\\dfrac{10+1}{2} = \\dfrac{11}{2} = 5.5$$\n\nThis shortcut also tells you instantly that the average of the first $99$ natural numbers is $50$, without adding a single number."
+   }
+ ];
+ 
+diff --git a/src/styles.css b/src/styles.css
+index 0191115..7819dd6 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -174,6 +174,12 @@ body {
+   color: #c8451f;
+ }
+ 
++.sidebar__divider {
++  height: 1px;
++  background: var(--border-subtle);
++  margin: 0.6rem 0.5rem;
++}
++
+ .sidebar__footnote {
+   margin-top: 1rem;
+   padding-top: 1rem;
+@@ -209,7 +215,8 @@ body {
+     padding: 1rem 1.25rem;
+   }
+   .sidebar__eyebrow,
+-  .sidebar__footnote {
++  .sidebar__footnote,
++  .sidebar__divider {
+     display: none;
+   }
+   .sidebar__brand {
+diff --git a/src/types.ts b/src/types.ts
+index 9d09604..0b87b57 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -11,6 +11,14 @@ export type ConfidenceLevel = "again" | "learning" | "mastered";
+ export interface Question {
+   /** Unique, stable id. Also the localStorage progress key — never reuse. */
+   id: string;
++  /**
++   * The exam family this question belongs to, e.g. "SSC CGL" or "SSC CHSL".
++   * This is what the sidebar groups and navigates by — one nav link per
++   * distinct examName found in the data, no code changes needed to add
++   * a new exam beyond adding questions with a new examName.
++   */
++  examName: string;
++  /** Specific sitting/year label shown on the card, e.g. "SSC CGL 2019". */
+   exam: string;
+   tier: string;
+   topic: string;

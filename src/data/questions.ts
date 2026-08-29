@@ -8,7 +8,8 @@
  *
  * {
  *   id: "unique-string-id",
- *   exam: "SSC CGL 2024",
+ *   examName: "SSC CGL",          // the exam family — sidebar groups/routes by this
+ *   exam: "SSC CGL 2024",         // the specific sitting/year, shown on the card
  *   tier: "Tier 1",
  *   topic: "Algebra",
  *   question: "LaTeX-ready string, e.g. If $x + \\frac{1}{x} = 5$ ...",
@@ -34,6 +35,7 @@ import type { Question } from "../types";
 export const QUESTIONS: Question[] = [
   {
     id: "q-alg-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2019",
     tier: "Tier 1",
     topic: "Algebra",
@@ -48,6 +50,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-per-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2021",
     tier: "Tier 1",
     topic: "Percentage",
@@ -62,6 +65,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-pl-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2022",
     tier: "Tier 1",
     topic: "Profit & Loss",
@@ -76,6 +80,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-tw-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2020",
     tier: "Tier 1",
     topic: "Time & Work",
@@ -90,6 +95,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-ci-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2018",
     tier: "Tier 1",
     topic: "Simple & Compound Interest",
@@ -104,6 +110,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-geo-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2023",
     tier: "Tier 1",
     topic: "Geometry",
@@ -118,6 +125,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-trig-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2021",
     tier: "Tier 1",
     topic: "Trigonometry",
@@ -132,6 +140,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-avg-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2019",
     tier: "Tier 1",
     topic: "Average",
@@ -146,6 +155,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-ratio-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2022",
     tier: "Tier 1",
     topic: "Ratio & Proportion",
@@ -160,6 +170,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: "q-num-01",
+    examName: "SSC CGL",
     exam: "SSC CGL 2023",
     tier: "Tier 1",
     topic: "Number System",
@@ -170,6 +181,41 @@ export const QUESTIONS: Question[] = [
       "Step 1: Find the remainder cycle of powers of $2$ modulo $7$.\n\n$$2^1 \\equiv 2,\\quad 2^2 \\equiv 4,\\quad 2^3 \\equiv 1 \\pmod 7$$\n\nStep 2: The remainders repeat with a cycle length of $3$ (since $2^3 \\equiv 1$).\n\nStep 3: Divide the exponent $100$ by the cycle length $3$.\n\n$$100 = 3 \\times 33 + 1$$\n\nStep 4: So $2^{100} \\equiv (2^3)^{33} \\times 2^1 \\equiv 1^{33} \\times 2 \\equiv 2 \\pmod 7$.",
     shortcutSolution:
       "For 'remainder of $a^n$ divided by $m$' questions, only the exponent's remainder on division by the cycle length matters.\n\nHere the cycle length is $3$ (found instantly: keep multiplying by 2 mod 7 until you hit 1 — it takes 3 steps). Just take $100 \\bmod 3 = 1$, then read off the $1^{\\text{st}}$ term of the cycle $(2, 4, 1, 2, 4, 1, \\ldots)$, which is $2$. No large powers ever get computed."
+  },
+
+  // ---------------------------------------------------------------
+  // A second exam family, demonstrating the sidebar's exam switching.
+  // Real, correctly-solved questions — but only 2, since this exists to
+  // prove the routing works, not as a real SSC CHSL question bank yet.
+  // Delete or expand freely; nothing else in the app needs to change.
+  // ---------------------------------------------------------------
+  {
+    id: "q-chsl-per-01",
+    examName: "SSC CHSL",
+    exam: "SSC CHSL 2023",
+    tier: "Tier 1",
+    topic: "Percentage",
+    question: "If $40\\%$ of a number is $96$, find the number.",
+    options: ["220", "240", "260", "280"],
+    correctIndex: 1,
+    basicSolution:
+      "Step 1: Let the number be $x$. We're told $40\\%$ of $x$ is $96$.\n\n$$0.40 \\times x = 96$$\n\nStep 2: Solve for $x$.\n\n$$x = \\dfrac{96}{0.40} = 240$$",
+    shortcutSolution:
+      "Read it as a fraction instead of a decimal: $40\\% = \\dfrac{2}{5}$, so $\\dfrac{2}{5}$ of the number is $96$.\n\n$$\\text{Number} = 96 \\times \\dfrac{5}{2} = 48 \\times 5 = 240$$\n\nHalving then multiplying by 5 is faster mental math than dividing by $0.4$."
+  },
+  {
+    id: "q-chsl-avg-01",
+    examName: "SSC CHSL",
+    exam: "SSC CHSL 2022",
+    tier: "Tier 1",
+    topic: "Average",
+    question: "Find the average of the first $10$ natural numbers.",
+    options: ["5", "5.5", "6", "4.5"],
+    correctIndex: 1,
+    basicSolution:
+      "Step 1: Sum of the first $10$ natural numbers using $\\dfrac{n(n+1)}{2}$.\n\n$$\\dfrac{10 \\times 11}{2} = 55$$\n\nStep 2: Divide by the count, $10$.\n\n$$\\dfrac{55}{10} = 5.5$$",
+    shortcutSolution:
+      "For the first $n$ natural numbers, the average is always $\\dfrac{n+1}{2}$ — no need to sum anything.\n\n$$\\dfrac{10+1}{2} = \\dfrac{11}{2} = 5.5$$\n\nThis shortcut also tells you instantly that the average of the first $99$ natural numbers is $50$, without adding a single number."
   }
 ];
 
