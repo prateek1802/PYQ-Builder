@@ -2,7 +2,7 @@
  * ExamForge — app logic (TypeScript).
  *
  * Bundled by Vite. All progress lives in localStorage. No framework —
- * plain DOM manipulation with a minimal hash router across three views,
+ * plain DOM manipulation with a minimal hash router across four views,
  * rendered into the persistent sidebar shell defined in index.html:
  *
  *   #/exam/<name>              — topic cards for that exam (the landing
@@ -11,7 +11,10 @@
  *   #/exam/<name>/topic/<t>    — one-question-at-a-time practice, scoped
  *                                 to that topic (or "all" for every
  *                                 question in the exam)
- *   #/progress                 — mastery breakdown across everything
+ *   #/analytics                — hub: one card per exam, showing its
+ *                                 overall mastery
+ *   #/analytics/<name>         — that exam's full topic-by-topic
+ *                                 mastery breakdown
  */
 
 import { QUESTIONS } from "./data/questions";
@@ -64,7 +67,7 @@ const ARROW_RIGHT_ICON =
 const EXAM_NAV_ICON =
   '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h5A1.5 1.5 0 0 1 10 3.5v9A1.5 1.5 0 0 1 8.5 14h-5A1.5 1.5 0 0 1 2 12.5v-9Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 5.5 14 6.7v5.6L12 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-const PROGRESS_NAV_ICON =
+const ANALYTICS_NAV_ICON =
   '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 14V2M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11V8M8.5 11V5.5M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
 let progress: ProgressMap = loadProgress();
@@ -74,7 +77,8 @@ let currentSessionKey: string | null = null;
 type Route =
   | { kind: "topics"; examName: string }
   | { kind: "practice"; examName: string; topic: string }
-  | { kind: "progress" };
+  | { kind: "analytics-hub" }
+  | { kind: "analytics-exam"; examName: string };
 
 function getAllExamNames(): string[] {
   return Array.from(new Set(QUESTIONS.map((q) => q.examName))).sort();
@@ -162,9 +166,18 @@ function spawnConfetti(originEl: HTMLElement): void {
 
 function getRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
-  if (hash === "progress") return { kind: "progress" };
-
   const exams = getAllExamNames();
+
+  if (hash === "analytics") return { kind: "analytics-hub" };
+
+  const analyticsExamMatch = hash.match(/^analytics\/(.+)$/);
+  if (analyticsExamMatch) {
+    const examName = decodeURIComponent(analyticsExamMatch[1]);
+    if (exams.includes(examName)) {
+      return { kind: "analytics-exam", examName };
+    }
+    return { kind: "analytics-hub" };
+  }
 
   const practiceMatch = hash.match(/^exam\/([^/]+)\/topic\/(.+)$/);
   if (practiceMatch) {
@@ -189,8 +202,8 @@ function getRoute(): Route {
 
 function setActiveNav(route: Route): void {
   sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-link").forEach((link) => {
-    if (route.kind === "progress") {
-      link.classList.toggle("is-active", link.dataset.route === "progress");
+    if (route.kind === "analytics-hub" || route.kind === "analytics-exam") {
+      link.classList.toggle("is-active", link.dataset.route === "analytics");
     } else {
       link.classList.toggle(
         "is-active",
@@ -203,8 +216,10 @@ function setActiveNav(route: Route): void {
 function renderRoute(): void {
   const route = getRoute();
   setActiveNav(route);
-  if (route.kind === "progress") {
-    renderProgressView(viewRoot);
+  if (route.kind === "analytics-hub") {
+    renderAnalyticsHubView(viewRoot);
+  } else if (route.kind === "analytics-exam") {
+    renderAnalyticsExamView(viewRoot, route.examName);
   } else if (route.kind === "topics") {
     renderTopicsView(viewRoot, route.examName);
   } else {
@@ -232,15 +247,15 @@ function renderSidebarNav(): void {
   divider.className = "sidebar__divider";
   frag.appendChild(divider);
 
-  const progressBtn = document.createElement("button");
-  progressBtn.type = "button";
-  progressBtn.className = "nav-link";
-  progressBtn.dataset.route = "progress";
-  progressBtn.innerHTML = `${PROGRESS_NAV_ICON} Progress`;
-  progressBtn.addEventListener("click", () => {
-    location.hash = "/progress";
+  const analyticsBtn = document.createElement("button");
+  analyticsBtn.type = "button";
+  analyticsBtn.className = "nav-link";
+  analyticsBtn.dataset.route = "analytics";
+  analyticsBtn.innerHTML = `${ANALYTICS_NAV_ICON} Analytics`;
+  analyticsBtn.addEventListener("click", () => {
+    location.hash = "/analytics";
   });
-  frag.appendChild(progressBtn);
+  frag.appendChild(analyticsBtn);
 
   sidebarNav.innerHTML = "";
   sidebarNav.appendChild(frag);
@@ -255,8 +270,6 @@ function renderSidebarNav(): void {
 function renderTopicsView(root: HTMLElement, examName: string): void {
   const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
   const total = examQuestions.length;
-  const mastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
-  const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
   const topics = Array.from(new Set(examQuestions.map((q) => q.topic))).sort();
 
   const topicCardsHtml = topics
@@ -277,16 +290,10 @@ function renderTopicsView(root: HTMLElement, examName: string): void {
 
   root.innerHTML = `
     <div class="view-inner">
-      <div class="stat-card">
-        <span class="stat-card__eyebrow">Practice</span>
-        <h1 class="stat-card__title">${escapeHtml(examName)}</h1>
-        <p class="stat-card__subtitle">Choose a topic to start practicing.</p>
-        <div class="stat-card__stat">
-          <span class="stat-card__label">Your progress</span>
-          <span class="stat-card__value font-tabular">${mastered} / ${total}</span>
-          <span class="stat-card__delta">${TREND_ICON} ${pct}% mastered</span>
-          <div class="stat-card__track"><div class="stat-card__fill" style="width:${pct}%"></div></div>
-        </div>
+      <div class="topics-header">
+        <span class="topics-header__eyebrow">Practice</span>
+        <h1 class="topics-header__title">${escapeHtml(examName)}</h1>
+        <p class="topics-header__subtitle">Choose a topic to start practicing.</p>
       </div>
 
       <div class="topic-card-grid">
@@ -516,75 +523,106 @@ function handleOptionClick(card: HTMLElement, q: Question, chosenIdx: number, ch
 }
 
 // ---------------------------------------------------------------
-// Progress view — one page, sectioned by exam. Topic names can repeat
-// across exams (e.g. both SSC CGL and SSC CHSL have "Percentage"), so
-// grouping by exam first avoids silently merging their mastery counts
-// into one misleading row.
+// Analytics — a hub (list of exams) and a per-exam detail page,
+// mirroring the same drill-down pattern as Practice (exam → topics →
+// question). Topic names can repeat across exams (e.g. both SSC CGL
+// and SSC CHSL have "Percentage"), so keeping each exam's breakdown on
+// its own page avoids merging their mastery counts into one row.
 // ---------------------------------------------------------------
 
-function renderProgressView(root: HTMLElement): void {
-  const total = QUESTIONS.length;
-  const masteredCount = QUESTIONS.filter((q) => progress[q.id]?.confidence === "mastered").length;
-  const pct = total === 0 ? 0 : Math.round((masteredCount / total) * 100);
-
-  const examSectionsHtml = getAllExamNames()
+function renderAnalyticsHubView(root: HTMLElement): void {
+  const examCardsHtml = getAllExamNames()
     .map((examName) => {
       const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
-      const examTotal = examQuestions.length;
-      const examMastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
-      const examPct = examTotal === 0 ? 0 : Math.round((examMastered / examTotal) * 100);
-
-      const topics = Array.from(new Set(examQuestions.map((q) => q.topic))).sort();
-      const topicRowsHtml = topics
-        .map((topic) => {
-          const topicQuestions = examQuestions.filter((q) => q.topic === topic);
-          const topicMastered = topicQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
-          const topicPct =
-            topicQuestions.length === 0 ? 0 : Math.round((topicMastered / topicQuestions.length) * 100);
-          return `
-            <div class="topic-row" style="--topic-color:${colorForTopic(topic)}">
-              <div class="topic-row__top">
-                <span class="topic-row__dot" aria-hidden="true"></span>
-                <span class="topic-row__name">${escapeHtml(topic)}</span>
-                <span class="topic-row__stat font-tabular">${topicMastered} / ${topicQuestions.length} mastered</span>
-              </div>
-              <div class="topic-row__track"><div class="topic-row__fill" style="width:${topicPct}%"></div></div>
-            </div>
-          `;
-        })
-        .join("");
-
+      const total = examQuestions.length;
+      const mastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
+      const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
       return `
-        <section class="exam-section">
-          <div class="exam-section__header">
-            <h2 class="exam-section__title">${escapeHtml(examName)}</h2>
-            <span class="exam-section__stat font-tabular">${examMastered} / ${examTotal} mastered · ${examPct}%</span>
-          </div>
-          <div class="topic-list">
-            ${topicRowsHtml}
-          </div>
-        </section>
+        <button type="button" class="topic-card" data-exam="${escapeHtml(examName)}" style="--topic-color:var(--brand-accent)">
+          <span class="topic-card__dot" aria-hidden="true"></span>
+          <span class="topic-card__name">${escapeHtml(examName)}</span>
+          <span class="topic-card__stat font-tabular">${mastered} / ${total} mastered</span>
+          <div class="topic-card__track"><div class="topic-card__fill" style="width:${pct}%"></div></div>
+        </button>
       `;
     })
     .join("");
 
   root.innerHTML = `
     <div class="view-inner">
+      <div class="topics-header">
+        <span class="topics-header__eyebrow">Analytics</span>
+        <h1 class="topics-header__title">Your progress</h1>
+        <p class="topics-header__subtitle">Pick an exam to see its full breakdown.</p>
+      </div>
+
+      <div class="topic-card-grid">
+        ${examCardsHtml}
+      </div>
+    </div>
+  `;
+
+  root.querySelectorAll<HTMLButtonElement>("[data-exam]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const examName = btn.dataset.exam!;
+      location.hash = `/analytics/${encodeURIComponent(examName)}`;
+    });
+  });
+}
+
+function renderAnalyticsExamView(root: HTMLElement, examName: string): void {
+  const examQuestions = QUESTIONS.filter((q) => q.examName === examName);
+  const total = examQuestions.length;
+  const mastered = examQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
+  const pct = total === 0 ? 0 : Math.round((mastered / total) * 100);
+
+  const topics = Array.from(new Set(examQuestions.map((q) => q.topic))).sort();
+  const topicRowsHtml = topics
+    .map((topic) => {
+      const topicQuestions = examQuestions.filter((q) => q.topic === topic);
+      const topicMastered = topicQuestions.filter((q) => progress[q.id]?.confidence === "mastered").length;
+      const topicPct =
+        topicQuestions.length === 0 ? 0 : Math.round((topicMastered / topicQuestions.length) * 100);
+      return `
+        <div class="topic-row" style="--topic-color:${colorForTopic(topic)}">
+          <div class="topic-row__top">
+            <span class="topic-row__dot" aria-hidden="true"></span>
+            <span class="topic-row__name">${escapeHtml(topic)}</span>
+            <span class="topic-row__stat font-tabular">${topicMastered} / ${topicQuestions.length} mastered</span>
+          </div>
+          <div class="topic-row__track"><div class="topic-row__fill" style="width:${topicPct}%"></div></div>
+        </div>
+      `;
+    })
+    .join("");
+
+  root.innerHTML = `
+    <div class="view-inner">
+      <div class="back-link-row">
+        <button type="button" class="back-link" data-back>${ARROW_LEFT_ICON} Back to analytics</button>
+      </div>
+
       <div class="stat-card">
-        <span class="stat-card__eyebrow">Progress</span>
-        <h1 class="stat-card__title">How you're doing</h1>
-        <p class="stat-card__subtitle">Mastery across every exam you've practiced.</p>
+        <span class="stat-card__eyebrow">Analytics</span>
+        <h1 class="stat-card__title">${escapeHtml(examName)}</h1>
+        <p class="stat-card__subtitle">Mastery across every topic in this exam.</p>
         <div class="stat-card__stat">
           <span class="stat-card__label">Overall mastered</span>
-          <span class="stat-card__value font-tabular">${masteredCount} / ${total}</span>
+          <span class="stat-card__value font-tabular">${mastered} / ${total}</span>
           <span class="stat-card__delta">${TREND_ICON} ${pct}% mastered</span>
           <div class="stat-card__track"><div class="stat-card__fill" style="width:${pct}%"></div></div>
         </div>
       </div>
 
-      ${examSectionsHtml}
+      <div class="topic-list">
+        ${topicRowsHtml}
+      </div>
     </div>
   `;
+
+  root.querySelector<HTMLButtonElement>("[data-back]")!.addEventListener("click", () => {
+    location.hash = "/analytics";
+  });
 }
 
 // ---------------------------------------------------------------

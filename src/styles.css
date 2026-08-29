@@ -319,38 +319,35 @@ body {
 }
 
 /* ==========================================================================
-   Exam section — Progress view groups its topic breakdown by exam, since
-   topic names can repeat across exams (e.g. "Percentage" exists in both
-   SSC CGL and SSC CHSL) and would otherwise get merged into one row.
+   Topics header — lightweight title for the topic-card grid (exam
+   landing page) and the analytics hub. Deliberately not the heavy dark
+   stat-card: this page is for browsing/choosing, not for showing stats.
    ========================================================================== */
 
-.exam-section {
-  margin-bottom: 2rem;
+.topics-header {
+  margin-bottom: 1.75rem;
 }
 
-.exam-section:last-child {
-  margin-bottom: 0;
+.topics-header__eyebrow {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
-.exam-section__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.85rem;
-}
-
-.exam-section__title {
+.topics-header__title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.15rem;
+  font-size: 1.75rem;
   color: var(--ink);
+  margin-top: 0.25rem;
 }
 
-.exam-section__stat {
-  font-size: 0.8rem;
-  font-weight: 600;
+.topics-header__subtitle {
+  font-size: 0.92rem;
   color: var(--ink-muted);
+  margin-top: 0.35rem;
 }
 
 /* ==========================================================================
@@ -524,6 +521,10 @@ body {
 
 .back-link:hover {
   color: var(--ink);
+}
+
+.back-link-row {
+  margin-bottom: 1.5rem;
 }
 
 .practice-header__topic {
