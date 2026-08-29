@@ -319,6 +319,41 @@ body {
 }
 
 /* ==========================================================================
+   Exam section — Progress view groups its topic breakdown by exam, since
+   topic names can repeat across exams (e.g. "Percentage" exists in both
+   SSC CGL and SSC CHSL) and would otherwise get merged into one row.
+   ========================================================================== */
+
+.exam-section {
+  margin-bottom: 2rem;
+}
+
+.exam-section:last-child {
+  margin-bottom: 0;
+}
+
+.exam-section__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.exam-section__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.exam-section__stat {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+/* ==========================================================================
    Topic breakdown list — Progress view. Row pattern: colored dot + name
    + "x / y mastered" on top, a mini mastery bar underneath.
    ========================================================================== */
