@@ -23,10 +23,10 @@ import type { ConfidenceLevel, ProgressMap, Question } from "./types";
 const STORAGE_KEY = "examforge:progress:v1";
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const;
 
-// One accent color per topic, pulled from a curated set of muted jewel
-// tones — same saturation/lightness family so they read as a considered
-// palette when scanning multiple cards, not a rainbow of unrelated hues.
-const TOPIC_PALETTE = ["#B65E2B", "#966D23", "#1D6F6B", "#3F5B7A", "#6B4C93", "#3F6B4A"] as const;
+// One accent color per topic, drawn from a teal-to-mustard spectrum —
+// same family as the brand's two-tone system, so a row of topic cards
+// reads as variations on one palette rather than unrelated hues.
+const TOPIC_PALETTE = ["#1F7A6C", "#298085", "#9C6B22", "#B1621C", "#687C22", "#8C6D1F"] as const;
 
 function buildTopicColorMap(questions: Question[]): Map<string, string> {
   const topics = Array.from(new Set(questions.map((q) => q.topic))).sort();

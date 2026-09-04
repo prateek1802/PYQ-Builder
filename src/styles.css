@@ -1,11 +1,9 @@
 /* ==========================================================================
    ExamForge — design tokens
-   One considered accent family, not a rainbow: a deep wine/burgundy
-   brand color, a warm near-black for dark panels (same temperature as
-   the brand accent, not an unrelated purple), and topic colors pulled
-   from a curated set of muted jewel tones — same saturation/lightness
-   range so a row of different topics still reads as one coherent
-   palette rather than default chart colors.
+   Light, teal + mustard — a two-tone system (structure in teal, warm
+   highlights in mustard) on one light surface throughout. No dark
+   sections: every panel, including what used to be a dark hero band,
+   now lives on the same light background.
 
    Display: Space Grotesk (headlines, hero numerals, question text)
    Body:    Inter (UI chrome, prose)
@@ -13,32 +11,36 @@
    ========================================================================== */
 
 :root {
-  --surface: #faf8f4;
+  --surface: #f7faf9;
   --surface-raised: #ffffff;
-  --surface-sunken: #f1ede6;
-  --border-subtle: #e4ddd1;
+  --surface-sunken: #eef3f2;
+  --border-subtle: #dce6e4;
 
-  --ink: #211c18;
-  --ink-muted: #746c60;
-
-  --ink-dark: #211417; /* warm near-black, same family as the wine accent */
-  --ink-dark-text: #f5efe9;
-  --ink-dark-text-muted: #c2a8ac;
+  --ink: #12312e;
+  --ink-muted: #5a7773;
 
   --gain: #2f7a4f;
   --gain-soft: #e4f0e7;
 
-  --loss: #b23a2e;
-  --loss-soft: #f6e4e1;
+  --loss: #c0392b;
+  --loss-soft: #f8e4e1;
 
-  --brand-accent: #8b2942;
-  --brand-accent-soft: #f3e1e6;
+  --brand-accent: #0f6e68;
+  --brand-accent-soft: #dceeec;
+
+  /* Secondary accent (mustard) — two shades: -soft for tinted
+     backgrounds, -text for text placed on that tint (darker, so it
+     clears contrast; the plain --accent-secondary is for solid fills
+     and borders where contrast against white/ink applies instead). */
+  --accent-secondary: #d98c2b;
+  --accent-secondary-text: #935f1d;
+  --accent-secondary-soft: #fbedd6;
 
   --radius-card: 1.25rem;
   --radius-control: 0.65rem;
 
-  --shadow-sm: 0 1px 3px rgba(33, 20, 23, 0.06);
-  --shadow-md: 0 20px 40px rgba(33, 20, 23, 0.12);
+  --shadow-sm: 0 1px 3px rgba(18, 49, 46, 0.06);
+  --shadow-md: 0 20px 40px rgba(18, 49, 46, 0.12);
 
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -63,8 +65,8 @@ body {
 }
 
 ::selection {
-  background: var(--ink-dark);
-  color: var(--ink-dark-text);
+  background: var(--brand-accent-soft);
+  color: var(--brand-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -171,7 +173,7 @@ body {
 
 .nav-link.is-active {
   background: var(--brand-accent-soft);
-  color: #6b1f33;
+  color: var(--brand-accent);
 }
 
 .sidebar__divider {
@@ -230,14 +232,16 @@ body {
 }
 
 /* ==========================================================================
-   Stat card — reusable dark component (Practice's live progress stat,
-   Progress's overall total). Contained/rounded rather than full-bleed,
-   since it now lives in the content column beside the sidebar.
+   Stat card — reusable component (Practice's live progress stat,
+   Analytics' overall total). A light card like everything else — no
+   dark panel anywhere in this design.
    ========================================================================== */
 
 .stat-card {
-  background: var(--ink-dark);
-  color: var(--ink-dark-text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
   border-radius: 1.25rem;
   padding: 1.75rem 2rem 2rem;
   margin-bottom: 1.75rem;
@@ -248,7 +252,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: var(--ink-dark-text-muted);
+  color: var(--ink-muted);
 }
 
 .stat-card__title {
@@ -256,14 +260,14 @@ body {
   font-weight: 700;
   font-size: 1.9rem;
   letter-spacing: -0.01em;
-  color: var(--ink-dark-text);
+  color: var(--ink);
   line-height: 1.1;
   margin-top: 0.3rem;
 }
 
 .stat-card__subtitle {
   font-size: 0.92rem;
-  color: var(--ink-dark-text-muted);
+  color: var(--ink-muted);
   margin-top: 0.4rem;
   margin-bottom: 1.75rem;
 }
@@ -277,7 +281,7 @@ body {
 .stat-card__label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--ink-dark-text-muted);
+  color: var(--ink-muted);
 }
 
 .stat-card__value {
@@ -296,8 +300,8 @@ body {
   width: fit-content;
   padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  background: rgba(63, 122, 79, 0.25);
-  color: #8fd4a8;
+  background: var(--gain-soft);
+  color: var(--gain);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -306,7 +310,7 @@ body {
   margin-top: 0.4rem;
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--surface-sunken);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -478,18 +482,18 @@ body {
 
 .topic-card--all {
   grid-column: 1 / -1;
-  background: var(--ink-dark);
-  border-color: var(--ink-dark);
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
 }
 .topic-card--all .topic-card__name {
-  color: var(--ink-dark-text);
+  color: #fff;
   font-size: 1.05rem;
 }
 .topic-card--all .topic-card__stat {
-  color: var(--ink-dark-text-muted);
+  color: var(--brand-accent-soft);
 }
 .topic-card--all:hover {
-  border-color: var(--brand-accent);
+  border-color: var(--accent-secondary);
 }
 
 /* ==========================================================================
@@ -1000,17 +1004,20 @@ body {
   display: inline-block;
 }
 
-/* Exam shortcut — the dark panel, mirroring the hero band. The topic
-   color carries through as the heading accent. */
+/* Exam shortcut — mustard-tinted, the second half of the teal/basic +
+   mustard/shortcut two-tone system. Always mustard regardless of the
+   card's topic color, so the two solution panels read consistently
+   across every question. */
 .shortcut-solution {
-  background: var(--ink-dark);
-  border: 1px solid var(--ink-dark);
+  background: var(--accent-secondary-soft);
+  border: 1px solid transparent;
+  border-left: 3px solid var(--accent-secondary);
 }
 .shortcut-solution .solution__title {
-  color: var(--topic-color, var(--brand-accent));
+  color: var(--accent-secondary-text);
 }
 .shortcut-solution .solution__body p {
-  color: var(--ink-dark-text-muted);
+  color: var(--ink);
 }
 .shortcut-solution .solution__title svg {
   width: 12px;
