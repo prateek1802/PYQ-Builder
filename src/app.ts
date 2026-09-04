@@ -23,9 +23,10 @@ import type { ConfidenceLevel, ProgressMap, Question } from "./types";
 const STORAGE_KEY = "examforge:progress:v1";
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const;
 
-// One confident accent color per topic. Assigned round-robin over the
-// sorted topic list for even spread across the fixed six-color palette.
-const TOPIC_PALETTE = ["#FF6B4A", "#2F5EFF", "#2FAE66", "#F2A93B", "#E4568C", "#1FA6A0"] as const;
+// One accent color per topic, pulled from a curated set of muted jewel
+// tones — same saturation/lightness family so they read as a considered
+// palette when scanning multiple cards, not a rainbow of unrelated hues.
+const TOPIC_PALETTE = ["#B65E2B", "#966D23", "#1D6F6B", "#3F5B7A", "#6B4C93", "#3F6B4A"] as const;
 
 function buildTopicColorMap(questions: Question[]): Map<string, string> {
   const topics = Array.from(new Set(questions.map((q) => q.topic))).sort();
